@@ -1,0 +1,570 @@
+{
+  "users": [
+    {
+      "id": "user-superadmin",
+      "name": "Superadmin",
+      "email": "superadmin@smalledu.id",
+      "role": "admin",
+      "nisn_nip": "SA-001",
+      "password": "Sheilaon7!!",
+      "mustChangePassword": false,
+      "starsCount": 0,
+      "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "id": "user-teacher-rudiansyah",
+      "name": "RUDIANSYAH",
+      "email": "rudiopok@smalledu.id",
+      "role": "teacher",
+      "nisn_nip": "198820052025011045",
+      "password": "198820052025011045",
+      "mustChangePassword": false,
+      "assignedClasses": [
+        "X RPL 1",
+        "X RPL 2"
+      ],
+      "starsCount": 0,
+      "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "name": "dina",
+      "email": "dina@email.com",
+      "role": "student",
+      "nisn_nip": "21212121",
+      "gradeClass": "X RPL 1",
+      "password": "12341234",
+      "mustChangePassword": false,
+      "id": "user-1789133452420",
+      "starsCount": 0,
+      "createdAt": "2026-09-11T13:30:52.420Z"
+    }
+  ],
+  "classes": [
+    {
+      "id": "cls-1",
+      "name": "X RPL 1",
+      "major": "Rekayasa Perangkat Lunak",
+      "gradeLevel": "Kelas X",
+      "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "id": "cls-2",
+      "name": "X RPL 2",
+      "major": "Rekayasa Perangkat Lunak",
+      "gradeLevel": "Kelas X",
+      "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "id": "cls-3",
+      "name": "XI RPL 1",
+      "major": "Rekayasa Perangkat Lunak",
+      "gradeLevel": "Kelas XI",
+      "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "name": "XI RPL 2",
+      "major": "Rekayasa Perangkat Lunak",
+      "gradeLevel": "Kelas XI",
+      "id": "cls-1789044831125",
+      "createdAt": "2026-09-10T12:53:51.125Z"
+    }
+  ],
+  "courses": [
+    {
+      "title": "DASAR DASAR PENGEMBANGAN PERANGKAT LUNAK DAN GIM",
+      "subject": "DDPK A - PEMROGRAMAN",
+      "gradeLevel": "Kelas X",
+      "description": "Mata pelajaran pembelajaran mandiri berurutan.",
+      "thumbnailBg": "#FFE169",
+      "teacherId": "user-teacher-rudiansyah",
+      "teacherName": "RUDIANSYAH",
+      "chaptersCount": 2,
+      "isPublished": true,
+      "targetClasses": [
+        "X RPL 1",
+        "X RPL 2"
+      ],
+      "id": "crs-1789119026980",
+      "starSettings": {
+        "xpPerStar": 100,
+        "defaultVideoXp": 15,
+        "defaultPdfXp": 15,
+        "defaultTextXp": 15,
+        "defaultLinkXp": 15,
+        "defaultAssignmentXp": 20,
+        "defaultQuizXp": 20,
+        "onTimeBonusXp": 15
+      }
+    }
+  ],
+  "chapters": [
+    {
+      "courseId": "crs-1789119026980",
+      "title": "Sub-Bab 1.1: TIPE DATA NUMBER DAN STRING",
+      "description": "Bacalah materi dalam file ini",
+      "order_index": 1,
+      "type": "pdf",
+      "passing_grade": 75,
+      "babNumber": 1,
+      "babTitle": "BAB 1: MENGENAL TIPE DATA PADA JAVA SCRIPT",
+      "subChapterNumber": "1.1",
+      "itemCategory": "sub_chapter",
+      "fileUrl": "https://drive.google.com/file/d/13Ho5BHLM7Komftt65AtJOoNRR6al7INT/view?usp=sharing",
+      "activityRewardPoints": 15,
+      "schedule": {
+        "isEnabled": true,
+        "startDate": "2026-09-10T00:00:00.000Z",
+        "endDate": "2026-09-30T00:00:00.000Z"
+      },
+      "id": "ch-1789119246733",
+      "questions": [
+        {
+          "id": "q_1789126182419",
+          "type": "SINGLE_CHOICE",
+          "prompt": "Ibu kota negara vietnam",
+          "points": 10,
+          "options": [
+            {
+              "id": "opt_1",
+              "text": "Hanoi"
+            },
+            {
+              "id": "opt_2",
+              "text": "Bangkok"
+            },
+            {
+              "id": "opt_3",
+              "text": "Beijing"
+            },
+            {
+              "id": "opt_4",
+              "text": "Shanghai"
+            }
+          ],
+          "correctAnswer": "opt_1"
+        }
+      ]
+    },
+    {
+      "courseId": "crs-1789119026980",
+      "title": "Sub-Bab 1.2: Sub-Bab 1.2: Video Pembelajaran JavaScript",
+      "description": "Simak video berikut ini sampai tuntas.",
+      "order_index": 2,
+      "type": "video",
+      "passing_grade": 75,
+      "babNumber": 1,
+      "babTitle": "BAB 1: MENGENAL TIPE DATA PADA JAVA SCRIPT",
+      "subChapterNumber": "1.21.2",
+      "itemCategory": "sub_chapter",
+      "videoUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "id": "ch-1789131351072"
+    }
+  ],
+  "submissions": [
+    {
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "studentId": "user-1789119521984",
+      "studentName": "dika",
+      "answers": {
+        "q_1789126583003": "opt_1"
+      },
+      "autoScore": 100,
+      "finalScore": 100,
+      "status": "graded",
+      "modeBAnalysis": [],
+      "id": "sub-1789126939283",
+      "submittedAt": "2026-09-11T11:42:19.283Z"
+    },
+    {
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "studentId": "user-1789119521984",
+      "studentName": "dika",
+      "answers": {
+        "q_1789126583003": "opt_2"
+      },
+      "autoScore": 0,
+      "finalScore": 0,
+      "status": "graded",
+      "modeBAnalysis": [],
+      "id": "sub-1789126947427",
+      "submittedAt": "2026-09-11T11:42:27.427Z"
+    },
+    {
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "studentId": "user-1789119521984",
+      "studentName": "dika",
+      "answers": {
+        "q_1789126182419": "opt_2"
+      },
+      "autoScore": 0,
+      "finalScore": 0,
+      "status": "graded",
+      "modeBAnalysis": [],
+      "id": "sub-1789129534283",
+      "submittedAt": "2026-09-11T12:25:34.283Z"
+    },
+    {
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "studentId": "user-1789119521984",
+      "studentName": "dika",
+      "answers": {
+        "q_1789126182419": "opt_1"
+      },
+      "autoScore": 100,
+      "finalScore": 100,
+      "status": "graded",
+      "modeBAnalysis": [],
+      "id": "sub-1789129542914",
+      "submittedAt": "2026-09-11T12:25:42.914Z"
+    },
+    {
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "studentId": "user-1789133094462",
+      "studentName": "dodi",
+      "answers": {
+        "q_1789126182419": "opt_1"
+      },
+      "autoScore": 100,
+      "finalScore": 100,
+      "status": "graded",
+      "modeBAnalysis": [],
+      "id": "sub-1789133193564",
+      "submittedAt": "2026-09-11T13:26:33.564Z"
+    }
+  ],
+  "achievements": [],
+  "activityLogs": [
+    {
+      "id": "act-1789134000673-z92q",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789119521984",
+      "timestamp": "2026-09-11T13:40:00.673Z"
+    },
+    {
+      "id": "act-1789133998133-mqec",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789133094462",
+      "timestamp": "2026-09-11T13:39:58.133Z"
+    },
+    {
+      "id": "act-1789133452427-e9f4",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: dina (student) - 21212121",
+      "timestamp": "2026-09-11T13:30:52.427Z"
+    },
+    {
+      "id": "act-1789133094472-fvb3",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: dodi (student) - 1234512345",
+      "timestamp": "2026-09-11T13:24:54.472Z"
+    },
+    {
+      "id": "act-1789124336279-r9zy",
+      "userId": "user-1789111457100",
+      "userName": "Makmur",
+      "userRole": "student",
+      "action": "MODUL_PDF_SELESAI",
+      "details": "Menyelesaikan dan mempelajari dokumen modul Sub-Bab 1.1: TIPE DATA NUMBER DAN STRING (Status: Lulus).",
+      "courseId": "crs-1789119026980",
+      "chapterId": "ch-1789119246733",
+      "timestamp": "2026-09-11T10:58:56.279Z"
+    },
+    {
+      "id": "act-1789119521991-90ve",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: dika (student) - 11223344",
+      "timestamp": "2026-09-11T09:38:41.991Z"
+    },
+    {
+      "id": "act-1789111457129-4wqj",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: Makmur (student) - 123456",
+      "timestamp": "2026-09-11T07:24:17.129Z"
+    },
+    {
+      "id": "act-1789010562909",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: RUDIANSYAH (teacher) - 198820052025011045",
+      "timestamp": "2026-09-10T03:22:42.909Z"
+    },
+    {
+      "id": "act-1789010593161",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: RAMADHANI AISYAH (student) - 111111111",
+      "timestamp": "2026-09-10T03:23:13.161Z"
+    },
+    {
+      "id": "act-1789010851364",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: RAMADHANI AISYAH (student) - 1111111111111111",
+      "timestamp": "2026-09-10T03:27:31.364Z"
+    },
+    {
+      "id": "act-1789017967981",
+      "userId": "user-student-ica",
+      "userName": "Ica Aurelia",
+      "userRole": "student",
+      "action": "TEXT_READING_FINISHED",
+      "details": "Menyelesaikan modul bacaan BAB I: Pengantar Arsitektur Web (Dwell time & scroll tuntas).",
+      "courseId": "course-web-dev",
+      "chapterId": "ch-1789017667715",
+      "timestamp": "2026-09-10T05:26:07.981Z"
+    },
+    {
+      "id": "act-1789018047055",
+      "userId": "user-student-ica",
+      "userName": "Ica Aurelia",
+      "userRole": "student",
+      "action": "SUBMIT_ASSIGNMENT_FILE",
+      "details": "Mengunggah berkas portofolio TUGAS 1: Praktik Membuat Portofolio HTML. Menunggu penilaian guru.",
+      "courseId": "course-web-dev",
+      "chapterId": "ch-1789017763531",
+      "timestamp": "2026-09-10T05:27:27.055Z"
+    },
+    {
+      "id": "act-1789019927281",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789010562905",
+      "timestamp": "2026-09-10T05:58:47.281Z"
+    },
+    {
+      "id": "act-1789018157991",
+      "userId": "user-student-ica",
+      "userName": "Ica Aurelia",
+      "userRole": "student",
+      "action": "SUBMISSION_GRADED",
+      "details": "Tugas/Kuis diverifikasi oleh Ica Aurelia dengan nilai akhir 85.",
+      "courseId": "course-web-dev",
+      "chapterId": "ch-1789017763531",
+      "timestamp": "2026-09-10T05:29:17.991Z"
+    },
+    {
+      "id": "act-1789019917989",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789010851357",
+      "timestamp": "2026-09-10T05:58:37.989Z"
+    },
+    {
+      "id": "act-1789019929963",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-teacher-rudiansyah",
+      "timestamp": "2026-09-10T05:58:49.963Z"
+    },
+    {
+      "id": "act-1789019967440",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: RUDIANSYAH (teacher) - 1988085780803664",
+      "timestamp": "2026-09-10T05:59:27.440Z"
+    },
+    {
+      "id": "act-1789020379308",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789019967439",
+      "timestamp": "2026-09-10T06:06:19.308Z"
+    },
+    {
+      "id": "act-1789028171735",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789028000291",
+      "timestamp": "2026-09-10T08:16:11.735Z"
+    },
+    {
+      "id": "act-1789028000333",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: Budi Santoso (student) - 12345678901234567890",
+      "timestamp": "2026-09-10T08:13:20.333Z"
+    },
+    {
+      "id": "act-1789020398260",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: SITI (teacher) - 1988085780803664",
+      "timestamp": "2026-09-10T06:06:38.260Z"
+    },
+    {
+      "id": "act-1789108671111-uio3",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789080275957",
+      "timestamp": "2026-09-11T06:37:51.111Z"
+    },
+    {
+      "id": "act-1789108377469-dfbb",
+      "userId": "user-1789080275957",
+      "userName": "makmur",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "SYNC_XP_REWARD",
+      "details": "Penyelarasan otomatis poin keaktifan: +20 XP dari materi yang telah tuntas dipelajari.",
+      "timestamp": "2026-09-11T06:32:57.469Z"
+    },
+    {
+      "id": "act-1789080353765-3v9l",
+      "userId": "user-1789080275957",
+      "userName": "makmur",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "MODUL_PDF_SELESAI",
+      "details": "Menyelesaikan dan mempelajari dokumen modul Sub-Bab 1.1: Memahami Konsep Tipe Data String dan Number (Status: Lulus).",
+      "courseId": "crs-1789031939976",
+      "chapterId": "ch-1789032120190",
+      "timestamp": "2026-09-10T22:45:53.765Z"
+    },
+    {
+      "id": "act-1789080276000-xp01",
+      "userId": "user-1789080275957",
+      "userName": "makmur",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "ACTIVITY_XP_GAINED",
+      "details": "+20 XP (Modul PDF Tuntas): Mempelajari dokumen modul Sub-Bab 1.1: Memahami Konsep Tipe Data String dan Number. Progres: 20/100 XP.",
+      "courseId": "crs-1789031939976",
+      "chapterId": "ch-1789032120190",
+      "xpGained": 20,
+      "timestamp": "2026-09-10T22:45:00.000Z"
+    },
+    {
+      "id": "act-1789080275959-mkgz",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: makmur (student) - 123456",
+      "timestamp": "2026-09-10T22:44:35.959Z"
+    },
+    {
+      "id": "act-1789080207240-x39a",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789031775397",
+      "timestamp": "2026-09-10T22:43:27.240Z"
+    },
+    {
+      "id": "act-1789080204417-nujj",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "DELETE_USER",
+      "details": "Menghapus pengguna ID: user-1789045049043",
+      "timestamp": "2026-09-10T22:43:24.417Z"
+    },
+    {
+      "id": "act-1789045500002",
+      "userId": "user-1789031775397",
+      "userName": "contoh",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "TAUTAN_MATERI_SELESAI",
+      "details": "Menyelesaikan penugasan tautan materi eksternal TUGAS 1 (Status: Lulus).",
+      "courseId": "crs-1789031939976",
+      "chapterId": "ch-1789032250448",
+      "timestamp": "2026-09-10T13:15:00.000Z"
+    },
+    {
+      "id": "act-1789045500001",
+      "userId": "user-1789031775397",
+      "userName": "contoh",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "MODUL_PDF_SELESAI",
+      "details": "Menyelesaikan dan mempelajari dokumen modul BAB 1: MENGENAL TIPE DATA STRING DAN NUMBER (Status: Lulus).",
+      "courseId": "crs-1789031939976",
+      "chapterId": "ch-1789032120190",
+      "timestamp": "2026-09-10T13:10:00.000Z"
+    }
+  ],
+  "deletedUserIds": [
+    "user-student-ica",
+    "user-budi-test",
+    "user-1789045049043",
+    "user-1789031775397",
+    "user-1789080275957",
+    "user-1789111457100",
+    "user-1789133094462",
+    "user-1789119521984"
+  ],
+  "deletedClassIds": [],
+  "progress": {
+    "user-1789133094462_crs-1789119026980": {
+      "userId": "user-1789133094462",
+      "courseId": "crs-1789119026980",
+      "current_chapter_index": 2,
+      "totalStarsEarned": 0,
+      "chapters": {
+        "ch-1789119246733": {
+          "chapterId": "ch-1789119246733",
+          "order_index": 1,
+          "is_completed": true,
+          "status": "passed",
+          "score": 100,
+          "lastAttemptAt": "2026-09-11T13:26:33.566Z"
+        },
+        "ch-1789131351072": {
+          "chapterId": "ch-1789131351072",
+          "order_index": 2,
+          "is_completed": false,
+          "status": "unlocked"
+        }
+      }
+    }
+  }
+}
