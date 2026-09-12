@@ -31,11 +31,25 @@ export default function TeacherGradingPage() {
   const loadSubmissions = async () => {
     const currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
-    const all = await DataProvider.getSubmissionsAsync();
-    setSubmissions(all);
-    if (all.length > 0 && !selectedSub) {
-      setSelectedSub(all[0]);
-      setTeacherScore(all[0].finalScore || 85);
+    const [all, allCourses] = await Promise.all([
+      DataProvider.getSubmissionsAsync(),
+      DataProvider.getCoursesAsync(),
+    ]);
+
+    let filtered = all;
+    if (currentUser?.role === 'teacher') {
+      const myCourseIds = new Set(
+        allCourses.filter((c) => c.teacherId === currentUser.id).map((c) => c.id)
+      );
+      filtered = all.filter((s) => myCourseIds.has(s.courseId));
+    }
+
+    setSubmissions(filtered);
+    if (filtered.length > 0 && (!selectedSub || !filtered.some((s) => s.id === selectedSub.id))) {
+      setSelectedSub(filtered[0]);
+      setTeacherScore(filtered[0].finalScore || 85);
+    } else if (filtered.length === 0) {
+      setSelectedSub(null);
     }
   };
 

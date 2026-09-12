@@ -37,6 +37,7 @@ function AdminContent() {
   const [teacherName, setTeacherName] = useState('');
   const [teacherEmail, setTeacherEmail] = useState('');
   const [teacherNip, setTeacherNip] = useState('');
+  const [teacherAssignedClasses, setTeacherAssignedClasses] = useState<string[]>([]);
 
   // Form Kelas (Create)
   const [className, setClassName] = useState('');
@@ -134,12 +135,14 @@ function AdminContent() {
       email: teacherEmail.trim(),
       role: 'teacher',
       nisn_nip: teacherNip.trim(),
+      assignedClasses: teacherAssignedClasses,
     });
 
     setNotification(`Guru ${teacherName} berhasil ditambahkan! Kata sandi default adalah NIP: ${teacherNip.trim()}`);
     setTeacherName('');
     setTeacherEmail('');
     setTeacherNip('');
+    setTeacherAssignedClasses([]);
     loadData();
     setTimeout(() => setNotification(null), 6000);
   };
@@ -153,6 +156,7 @@ function AdminContent() {
       email: editingTeacher.email.trim(),
       nisn_nip: editingTeacher.nisn_nip?.trim(),
       password: editingTeacher.password?.trim(),
+      assignedClasses: editingTeacher.assignedClasses || [],
     });
 
     setNotification(`Data Guru ${editingTeacher.name} berhasil diperbarui!`);
@@ -564,6 +568,47 @@ function AdminContent() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block font-bold mb-1">
+                    🏫 Kelas yang Diampu (Pilih Kelas):
+                  </label>
+                  {classes.length === 0 ? (
+                    <div className="p-2 bg-yellow-50 text-[11px] text-zinc-600 border border-yellow-300">
+                      Belum ada kelas terdaftar. Buat kelas di tab &quot;Kelola Data Kelas&quot; terlebih dahulu.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 bg-zinc-50 neo-border-sm max-h-36 overflow-y-auto">
+                        {classes.map((cls) => {
+                          const isSelected = teacherAssignedClasses.includes(cls.name);
+                          return (
+                            <button
+                              key={cls.id}
+                              type="button"
+                              onClick={() => {
+                                setTeacherAssignedClasses((prev) =>
+                                  isSelected ? prev.filter((n) => n !== cls.name) : [...prev, cls.name]
+                                );
+                              }}
+                              className={`p-1.5 text-left text-[11px] font-bold neo-border-sm transition-all ${
+                                isSelected ? 'bg-[#008080] text-white neo-shadow-sm' : 'bg-white text-black hover:bg-zinc-100'
+                              }`}
+                            >
+                              <div className="truncate">{cls.name}</div>
+                              <div className="text-[9px] opacity-75">{cls.gradeLevel}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {teacherAssignedClasses.length > 0 && (
+                        <div className="text-[11px] text-emerald-700 font-bold">
+                          ✓ Mengampu: {teacherAssignedClasses.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div className="pt-2">
                   <RetroButton type="submit" variant="teal" className="w-full" size="sm" icon={<Plus className="w-4 h-4" />}>
                     Daftarkan Guru Baru
@@ -586,6 +631,7 @@ function AdminContent() {
                       <th className="p-2.5">Nama Guru</th>
                       <th className="p-2.5">Email</th>
                       <th className="p-2.5">NIP</th>
+                      <th className="p-2.5">Kelas Diampu</th>
                       <th className="p-2.5">Password</th>
                       <th className="p-2.5 text-center">Aksi (Edit / Hapus)</th>
                     </tr>
@@ -601,6 +647,19 @@ function AdminContent() {
                         <td className="p-2.5 font-bold text-black">{t.name}</td>
                         <td className="p-2.5 text-zinc-600">{t.email}</td>
                         <td className="p-2.5 font-bold">{t.nisn_nip || '-'}</td>
+                        <td className="p-2.5">
+                          {t.assignedClasses && t.assignedClasses.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {t.assignedClasses.map((cls) => (
+                                <span key={cls} className="text-[10px] bg-teal-100 text-teal-900 px-1.5 py-0.5 border border-teal-300 font-bold">
+                                  🏫 {cls}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-zinc-400 italic">Belum diatur</span>
+                          )}
+                        </td>
                         <td className="p-2.5">
                           <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 border border-emerald-400 font-bold">
                             {t.password || t.nisn_nip || 'Sesuai NIP'}
@@ -629,7 +688,7 @@ function AdminContent() {
 
                     {teachers.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-zinc-500">
+                        <td colSpan={6} className="p-6 text-center text-zinc-500">
                           Belum ada guru yang didaftarkan.
                         </td>
                       </tr>
@@ -859,6 +918,52 @@ function AdminContent() {
                     className="w-full p-2 neo-border-sm bg-white font-bold"
                   />
                   <span className="text-[10px] text-zinc-500">Anda dapat mereset kata sandi guru langsung di sini.</span>
+                </div>
+
+                <div>
+                  <label className="block font-bold mb-1">
+                    🏫 Kelas yang Diampu (Pilih Kelas):
+                  </label>
+                  {classes.length === 0 ? (
+                    <div className="p-2 bg-yellow-50 text-[11px] text-zinc-600 border border-yellow-300">
+                      Belum ada kelas terdaftar.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 bg-zinc-50 neo-border-sm max-h-36 overflow-y-auto">
+                        {classes.map((cls) => {
+                          const currentAssigned = editingTeacher.assignedClasses || [];
+                          const isSelected = currentAssigned.includes(cls.name);
+                          return (
+                            <button
+                              key={cls.id}
+                              type="button"
+                              onClick={() => {
+                                const next = isSelected
+                                  ? currentAssigned.filter((n) => n !== cls.name)
+                                  : [...currentAssigned, cls.name];
+                                setEditingTeacher({
+                                  ...editingTeacher,
+                                  assignedClasses: next,
+                                });
+                              }}
+                              className={`p-1.5 text-left text-[11px] font-bold neo-border-sm transition-all ${
+                                isSelected ? 'bg-[#008080] text-white neo-shadow-sm' : 'bg-white text-black hover:bg-zinc-100'
+                              }`}
+                            >
+                              <div className="truncate">{cls.name}</div>
+                              <div className="text-[9px] opacity-75">{cls.gradeLevel}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {(editingTeacher.assignedClasses && editingTeacher.assignedClasses.length > 0) && (
+                        <div className="text-[11px] text-emerald-700 font-bold">
+                          ✓ Mengampu: {editingTeacher.assignedClasses.join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 flex items-center justify-end gap-2">

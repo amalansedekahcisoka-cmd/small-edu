@@ -227,6 +227,15 @@ export class DataProvider {
         console.warn('Firestore getClasses error:', e);
       }
     }
+
+    // Ambil data terbaru dari server data/db.json jika Firebase belum disetup
+    const serverData = await fetchServerData();
+    if (serverData?.classes && Array.isArray(serverData.classes) && serverData.classes.length > 0) {
+      const valid = (serverData.classes as ClassRoom[]).filter((c) => !deletedIds.has(c.id));
+      safeSetItem(STORAGE_KEYS.CLASSES, valid);
+      return valid;
+    }
+
     return this.getClasses();
   }
 

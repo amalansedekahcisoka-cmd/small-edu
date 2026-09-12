@@ -106,19 +106,28 @@ export default function TeacherDashboard() {
   const [availableClasses, setAvailableClasses] = useState<import('@/types').ClassRoom[]>([]);
   const [courseClassFilter, setCourseClassFilter] = useState<string>('ALL');
 
-  const loadData = (courseToSelect?: Course) => {
+  const loadData = (courseToSelect?: Course, explicitCourses?: Course[]) => {
     const currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
-    const allCourses = DataProvider.getCourses();
-    setCourses(allCourses);
+    const allCourses = explicitCourses || DataProvider.getCourses();
+
+    // Pastikan guru hanya melihat dan mengelola mata pelajaran miliknya sendiri
+    const myCourses = currentUser?.role === 'teacher'
+      ? allCourses.filter((c) => c.teacherId === currentUser.id)
+      : allCourses;
+
+    setCourses(myCourses);
 
     // Muat daftar kelas dari sistem
     const classList = DataProvider.getClasses();
     setAvailableClasses(classList);
 
-    let currentC = courseToSelect || selectedCourse;
-    if (!currentC && allCourses.length > 0) {
-      currentC = allCourses[0];
+    let currentC = courseToSelect;
+    if (!currentC && selectedCourse && myCourses.some((c) => c.id === selectedCourse.id)) {
+      currentC = myCourses.find((c) => c.id === selectedCourse.id);
+    }
+    if (!currentC && myCourses.length > 0) {
+      currentC = myCourses[0];
     }
 
     if (currentC) {
@@ -131,21 +140,48 @@ export default function TeacherDashboard() {
     }
 
     const subs = DataProvider.getSubmissions().filter((s) => s.status === 'pending');
-    setPendingSubs(subs);
+    if (currentUser?.role === 'teacher') {
+      const myCourseIds = new Set(myCourses.map((c) => c.id));
+      setPendingSubs(subs.filter((s) => myCourseIds.has(s.courseId)));
+    } else {
+      setPendingSubs(subs);
+    }
   };
 
   useEffect(() => {
     loadData();
+    const currentUser = DataProvider.getCurrentUser();
+
     DataProvider.getCoursesAsync().then((serverCourses) => {
       if (serverCourses && serverCourses.length > 0) {
-        setCourses(serverCourses);
+        const myServerCourses = currentUser?.role === 'teacher'
+          ? serverCourses.filter((c) => c.teacherId === currentUser.id)
+          : serverCourses;
+        setCourses(myServerCourses);
+        setSelectedCourse((prev) => {
+          if (prev && myServerCourses.some((c) => c.id === prev.id)) {
+            return myServerCourses.find((c) => c.id === prev.id) || null;
+          }
+          return myServerCourses[0] || null;
+        });
       }
     });
+
     DataProvider.getSubmissionsAsync().then((serverSubs) => {
       if (serverSubs) {
-        setPendingSubs(serverSubs.filter((s) => s.status === 'pending'));
+        const pending = serverSubs.filter((s) => s.status === 'pending');
+        if (currentUser?.role === 'teacher') {
+          const allCourses = DataProvider.getCourses();
+          const myCourseIds = new Set(
+            allCourses.filter((c) => c.teacherId === currentUser.id).map((c) => c.id)
+          );
+          setPendingSubs(pending.filter((s) => myCourseIds.has(s.courseId)));
+        } else {
+          setPendingSubs(pending);
+        }
       }
     });
+
     DataProvider.getClassesAsync().then((serverClasses) => {
       if (serverClasses && serverClasses.length > 0) {
         setAvailableClasses(serverClasses);
@@ -582,7 +618,12 @@ export default function TeacherDashboard() {
               <div className="flex items-center justify-between pb-2 border-b-2 border-black font-mono text-xs">
                 <span className="font-bold">Daftar Kursus ({courses.length})</span>
                 <button
-                  onClick={() => setIsCourseModalOpen(true)}
+                  onClick={() => {
+                    DataProvider.getClassesAsync().then((cls) => {
+                      if (cls && cls.length > 0) setAvailableClasses(cls);
+                    });
+                    setIsCourseModalOpen(true);
+                  }}
                   className="text-xs bg-black text-[#ffde59] px-2 py-1 font-mono font-bold hover:bg-zinc-800 transition-colors flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" /> Tambah
@@ -660,6 +701,23 @@ export default function TeacherDashboard() {
                   </div>
                 </div>
               ))}
+
+              {courses.length === 0 && (
+                <div className="p-4 bg-zinc-50 neo-border-sm text-center font-mono text-xs text-zinc-500 space-y-2">
+                  <p>Anda belum memiliki kursus.</p>
+                  <button
+                    onClick={() => {
+                      DataProvider.getClassesAsync().then((cls) => {
+                        if (cls && cls.length > 0) setAvailableClasses(cls);
+                      });
+                      setIsCourseModalOpen(true);
+                    }}
+                    className="text-xs bg-black text-[#ffde59] px-3 py-1.5 font-mono font-bold hover:bg-zinc-800 transition-colors inline-flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Buat Kursus Baru
+                  </button>
+                </div>
+              )}
             </div>
           </RetroWindow>
 
@@ -677,6 +735,41 @@ export default function TeacherDashboard() {
 
         {/* Right 2 Cols: Chapters Management & Builder */}
         <div className="lg:col-span-2 space-y-4">
+          {!selectedCourse && (
+            <RetroWindow
+              title="MATA PELAJARAN / KURSUS"
+              headerColor="navy"
+              icon={<BookOpen className="w-4 h-4 text-yellow-300" />}
+            >
+              <div className="bg-white neo-border p-10 text-center space-y-4 font-mono">
+                <div className="w-16 h-16 bg-[#ffde59] text-black neo-border flex items-center justify-center mx-auto text-2xl font-black shadow-md">
+                  📚
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="font-black text-lg text-black">
+                    Belum Ada Mata Pelajaran yang Anda Buat
+                  </h3>
+                  <p className="text-xs text-zinc-600 max-w-md mx-auto leading-relaxed font-sans">
+                    Setiap guru hanya mengelola mata pelajaran miliknya sendiri. Anda belum memiliki kursus aktif. Silakan buat mata pelajaran baru untuk kelas yang Anda ampu.
+                  </p>
+                </div>
+                <RetroButton
+                  variant="yellow"
+                  size="md"
+                  icon={<Plus className="w-4 h-4" />}
+                  onClick={() => {
+                    DataProvider.getClassesAsync().then((cls) => {
+                      if (cls && cls.length > 0) setAvailableClasses(cls);
+                    });
+                    setIsCourseModalOpen(true);
+                  }}
+                >
+                  + Buat Mata Pelajaran Sekarang
+                </RetroButton>
+              </div>
+            </RetroWindow>
+          )}
+
           {selectedCourse && (
             <RetroWindow
               title={`SUSUNAN BAB & MATERI: ${selectedCourse.title.toUpperCase()}`}
@@ -1835,18 +1928,46 @@ export default function TeacherDashboard() {
 
                 {/* TARGET KELAS — WAJIB DIPILIH */}
                 <div className="space-y-2">
-                  <label className="block font-bold">
-                    🏫 Target Kelas (Pilih Kelas yang Bisa Akses Kursus Ini):
-                    <span className="text-red-600 ml-1">*</span>
-                  </label>
+                  <div className="flex items-center justify-between flex-wrap gap-1">
+                    <label className="block font-bold">
+                      🏫 Target Kelas (Pilih Kelas yang Bisa Akses Kursus Ini):
+                      <span className="text-red-600 ml-1">*</span>
+                    </label>
+                    {user?.assignedClasses && user.assignedClasses.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const userClasses = user.assignedClasses || [];
+                          const allSelected = userClasses.every((cls) => newCourseTargetClasses.includes(cls));
+                          if (allSelected) {
+                            setNewCourseTargetClasses((prev) => prev.filter((cls) => !userClasses.includes(cls)));
+                          } else {
+                            setNewCourseTargetClasses(Array.from(new Set([...newCourseTargetClasses, ...userClasses])));
+                          }
+                        }}
+                        className="text-[10px] font-mono font-bold bg-[#008080] text-white px-2 py-0.5 neo-border-sm hover:bg-[#006666] transition-colors"
+                      >
+                        ⚡ Pilih Semua Kelas yang Saya Ampu
+                      </button>
+                    )}
+                  </div>
+
+                  {user?.assignedClasses && user.assignedClasses.length > 0 && (
+                    <div className="text-[11px] text-teal-800 bg-teal-50 p-1.5 neo-border-sm font-bold flex items-center gap-1">
+                      <span>⭐ Kelas Anda yang terdaftar di sistem:</span>
+                      <span className="underline">{user.assignedClasses.join(', ')}</span>
+                    </div>
+                  )}
+
                   {availableClasses.length === 0 ? (
                     <div className="p-3 bg-[#fff8db] neo-border-sm text-[11px] text-zinc-700">
-                      ⚠️ Belum ada kelas terdaftar. Minta Administrator untuk menambahkan kelas terlebih dahulu.
+                      ⚠️ Belum ada kelas terdaftar. Minta Administrator untuk menambahkan kelas terlebih dahulu di tab &quot;Kelola Data Kelas&quot;.
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {availableClasses.map((cls) => {
                         const isSelected = newCourseTargetClasses.includes(cls.name);
+                        const isMyAssignedClass = user?.assignedClasses?.includes(cls.name);
                         return (
                           <button
                             key={cls.id}
@@ -1864,7 +1985,14 @@ export default function TeacherDashboard() {
                                 : 'bg-white hover:bg-zinc-100'
                             }`}
                           >
-                            <div className="text-[11px] font-bold">{cls.name}</div>
+                            <div className="flex items-center justify-between">
+                              <div className="text-[11px] font-bold">{cls.name}</div>
+                              {isMyAssignedClass && (
+                                <span className="text-[9px] bg-teal-600 text-white px-1 py-0.2 rounded-xs font-bold">
+                                  Anda
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[10px] text-zinc-500">{cls.gradeLevel}</div>
                           </button>
                         );
