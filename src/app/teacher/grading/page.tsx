@@ -25,6 +25,7 @@ export default function TeacherGradingPage() {
   const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
     allowedRoles: ['teacher', 'admin'],
   });
+  const [mounted, setMounted] = useState(false);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [teacherScore, setTeacherScore] = useState<number>(85);
@@ -32,6 +33,10 @@ export default function TeacherGradingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'pending' | 'graded' | 'all'>('pending');
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const loadSubmissions = async (preferredStatus?: 'pending' | 'graded' | 'all') => {
     const activeFilter = preferredStatus || statusFilter;
@@ -105,7 +110,7 @@ export default function TeacherGradingPage() {
     }
   };
 
-  if (isAuthLoading || !isAuthorized || !user) {
+  if (!mounted || isAuthLoading || !isAuthorized || !user) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
         <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>

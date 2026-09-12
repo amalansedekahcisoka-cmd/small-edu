@@ -39,11 +39,12 @@ export default function TeacherActivityLogPage() {
   const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
     allowedRoles: ['teacher', 'admin'],
   });
-  const [logs, setLogs] = useState<ActivityLog[]>(() => DataProvider.getActivityLogs());
-  const [classes, setClasses] = useState<ClassRoom[]>(() => DataProvider.getClasses());
-  const [students, setStudents] = useState<User[]>(() => DataProvider.getUsers().filter((u) => u.role === 'student'));
-  const [courses, setCourses] = useState<Course[]>(() => DataProvider.getCourses());
-  const [isLoading, setIsLoading] = useState<boolean>(() => DataProvider.getActivityLogs().length === 0);
+  const [mounted, setMounted] = useState(false);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [classes, setClasses] = useState<ClassRoom[]>([]);
+  const [students, setStudents] = useState<User[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [progressMap, setProgressMap] = useState<Record<string, UserCourseProgress>>({});
@@ -53,6 +54,14 @@ export default function TeacherActivityLogPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  useEffect(() => {
+    setMounted(true);
+    setLogs(DataProvider.getActivityLogs());
+    setClasses(DataProvider.getClasses());
+    setStudents(DataProvider.getUsers().filter((u) => u.role === 'student'));
+    setCourses(DataProvider.getCourses());
+  }, []);
 
   // Map user for fast lookup (fallback if log doesn't contain userClass)
   const userMap = useMemo(() => {
@@ -415,7 +424,7 @@ export default function TeacherActivityLogPage() {
     }
   };
 
-  if (isAuthLoading || !isAuthorized) {
+  if (!mounted || isAuthLoading || !isAuthorized) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
         <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
