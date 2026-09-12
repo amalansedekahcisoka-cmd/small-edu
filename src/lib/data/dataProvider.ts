@@ -922,15 +922,12 @@ export class DataProvider {
 
     progress.chapters[chapterId] = updatedChapter;
 
-    // Hitung apakah perlu membuka bab berikutnya
+    // Hitung apakah perlu membuka bab berikutnya (berapa pun nilainya, asalkan sudah dikerjakan/diselesaikan)
     const allChapters = this.getChapters(courseId);
     const currentCh = allChapters.find((c) => c.id === chapterId);
+    const isFinished = updatedChapter.is_completed || updatedChapter.status === 'passed' || updatedChapter.status === 'failed';
 
-    if (
-      currentCh &&
-      updatedChapter.is_completed &&
-      (updatedChapter.score ?? 100) >= (currentCh.passing_grade ?? 75)
-    ) {
+    if (currentCh && isFinished) {
       const nextIndex = currentCh.order_index + 1;
       const nextCh = allChapters.find((c) => c.order_index === nextIndex);
       if (nextCh) {
@@ -1025,7 +1022,7 @@ export class DataProvider {
     const remedialAllowed = !isPassed && currentAttempt < maxAttempts;
 
     this.updateChapterProgress(target.studentId, target.courseId, target.chapterId, {
-      is_completed: isPassed,
+      is_completed: true, // Bab ditandai selesai dipelajari/dikerjakan
       score: finalScore,
       status: isPassed ? 'passed' : 'failed',
       attemptCount: currentAttempt,

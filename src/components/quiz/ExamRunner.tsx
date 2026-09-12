@@ -223,7 +223,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
         existingProg.chapters?.[chapter.id]?.xpClaimed;
 
       DataProvider.updateChapterProgress(userId, courseId, chapter.id, {
-        is_completed: isPassed,
+        is_completed: true, // Bab selesai dikerjakan, membuka bab selanjutnya berapa pun nilainya
         score: grading.finalPercentage,
         status: isPassed ? 'passed' : 'failed',
         attemptCount: currentAttempt,
@@ -443,8 +443,8 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
                 : isPassed
                 ? p5.encouragement
                 : canRemedial
-                ? `Nilai Anda (${finalScore}) belum mencapai batas KKM (${passingScore}). Anda memiliki 1 kali kesempatan ujian remedial untuk memperbaiki nilai dan membuka bab selanjutnya.`
-                : `Anda telah menggunakan seluruh kesempatan pengerjaan (2 dari 2 kali). Nilai ini telah terkunci permanen di sistem rapor.`}
+                ? `Nilai Anda (${finalScore}) belum mencapai batas KKM (${passingScore}). Materi Bab berikutnya telah terbuka untuk Anda pelajari. Namun Anda tetap memiliki 1 kali kesempatan ujian remedial jika ingin memperbaiki nilai rapor!`
+                : `Anda telah menggunakan seluruh kesempatan pengerjaan (2 dari 2 kali). Nilai ini telah terkunci di buku nilai rapor, dan materi Bab selanjutnya sudah dapat Anda pelajari.`}
             </p>
           </div>
 
@@ -517,6 +517,27 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Navigasi Pembelajaran Terbuka Bebas Lanjut */}
+          {!isPending && (
+            <div className="pt-4 border-t-2 border-black flex items-center justify-between flex-wrap gap-3 font-mono">
+              <RetroButton
+                href="/student"
+                variant="white"
+                size="md"
+              >
+                ← Kembali ke Peta Alur Belajar
+              </RetroButton>
+
+              <RetroButton
+                href="/student"
+                variant="teal"
+                size="md"
+              >
+                Lanjutkan ke Materi Pembelajaran Selanjutnya →
+              </RetroButton>
             </div>
           )}
         </div>

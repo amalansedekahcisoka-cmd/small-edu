@@ -184,8 +184,9 @@ export function checkSequentialAccess(
     };
   }
 
-  // Cek status penyelesaian
-  if (!prevProg.is_completed) {
+  // Cek status penyelesaian (siswa sudah membaca/mengerjakan materi bab sebelumnya)
+  const isPreviousFinished = prevProg.is_completed || prevProg.status === 'passed' || prevProg.status === 'failed';
+  if (!isPreviousFinished) {
     return {
       canAccess: false,
       reason: `Kamu harus menyelesaikan Bab ${previousChapter.order_index} (${previousChapter.title}) terlebih dahulu.`,
@@ -195,20 +196,8 @@ export function checkSequentialAccess(
     };
   }
 
-  // Cek passing grade jika ada skor pada bab sebelumnya
-  const passingGrade = previousChapter.passing_grade ?? 75;
-  const score = prevProg.score ?? 100;
-
-  if (score < passingGrade) {
-    return {
-      canAccess: false,
-      reason: `Nilai kamu di Bab ${previousChapter.order_index} (${score}) belum mencapai target capaian pembelajaran (${passingGrade}). Silakan pelajari kembali materi atau lakukan latihan ulang.`,
-      previousChapter,
-      previousProgress: prevProg,
-      lockType: 'sequential',
-    };
-  }
-
+  // Catatan: Sesuai kebijakan pedagogis, berapa pun nilai yang diperoleh siswa (meskipun belum mencapai KKM),
+  // siswa tetap diizinkan untuk melangkah ke bab materi ajar berikutnya agar alur belajar tidak terkunci permanen.
   return {
     canAccess: true,
     previousChapter,
