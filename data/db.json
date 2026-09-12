@@ -25,18 +25,6 @@
       ],
       "starsCount": 0,
       "createdAt": "2026-07-01T08:00:00Z"
-    },
-    {
-      "name": "dina",
-      "email": "dina@email.com",
-      "role": "student",
-      "nisn_nip": "21212121",
-      "gradeClass": "X RPL 1",
-      "password": "12341234",
-      "mustChangePassword": false,
-      "id": "user-1789133452420",
-      "starsCount": 0,
-      "createdAt": "2026-09-11T13:30:52.420Z"
     }
   ],
   "classes": [
@@ -256,15 +244,6 @@
       "action": "DELETE_USER",
       "details": "Menghapus pengguna ID: user-1789133094462",
       "timestamp": "2026-09-11T13:39:58.133Z"
-    },
-    {
-      "id": "act-1789133452427-e9f4",
-      "userId": "user-superadmin",
-      "userName": "Superadmin",
-      "userRole": "admin",
-      "action": "CREATE_USER",
-      "details": "Mendaftarkan pengguna baru: dina (student) - 21212121",
-      "timestamp": "2026-09-11T13:30:52.427Z"
     },
     {
       "id": "act-1789133094472-fvb3",
@@ -540,7 +519,9 @@
     "user-1789080275957",
     "user-1789111457100",
     "user-1789133094462",
-    "user-1789119521984"
+    "user-1789119521984",
+    "user-1789133452420",
+    "user-student-1"
   ],
   "deletedClassIds": [],
   "progress": {

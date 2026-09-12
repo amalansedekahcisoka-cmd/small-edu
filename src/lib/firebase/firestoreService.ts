@@ -9,6 +9,8 @@ import {
   deleteDoc,
   query,
   where,
+  orderBy,
+  limit,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './client';
 import { User, Course, Chapter, Submission, UserCourseProgress, ActivityLog, ClassRoom } from '@/types';
@@ -65,8 +67,42 @@ export const FirestoreService = {
     try {
       const userRef = doc(db, 'users', userId);
       await deleteDoc(userRef);
+      await this.saveDeletedUserId(userId);
     } catch (e) {
       console.error('Error deleting user from Firestore', e);
+    }
+  },
+
+  async getDeletedUserIds(): Promise<string[]> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_users');
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data();
+        return Array.isArray(data?.ids) ? data.ids : [];
+      }
+      return [];
+    } catch (e) {
+      console.warn('Fallback: could not fetch deleted user IDs from Firestore', e);
+      return [];
+    }
+  },
+
+  async saveDeletedUserId(userId: string): Promise<void> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_users');
+      const snap = await getDoc(ref);
+      let currentIds: string[] = [];
+      if (snap.exists()) {
+        const data = snap.data();
+        currentIds = Array.isArray(data?.ids) ? [...data.ids] : [];
+      }
+      if (!currentIds.includes(userId)) {
+        currentIds.push(userId);
+        await setDoc(ref, { ids: currentIds, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving deleted user ID to Firestore', e);
     }
   },
 
@@ -210,6 +246,17 @@ export const FirestoreService = {
   },
 
   // --- SUBMISSIONS ---
+  async getSubmissions(): Promise<Submission[]> {
+    try {
+      const col = collection(db, 'submissions');
+      const snap = await getDocs(col);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Submission));
+    } catch (e) {
+      console.warn('Fallback: could not fetch submissions from Firestore', e);
+      return [];
+    }
+  },
+
   async saveSubmission(submission: Submission): Promise<void> {
     try {
       const ref = doc(db, 'submissions', submission.id);
@@ -220,6 +267,27 @@ export const FirestoreService = {
   },
 
   // --- ACTIVITY LOGS ---
+  async getActivityLogs(maxLogs = 200): Promise<ActivityLog[]> {
+    try {
+      const col = collection(db, 'activity_logs');
+      try {
+        const q = query(col, orderBy('timestamp', 'desc'), limit(maxLogs));
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ActivityLog));
+      } catch (orderErr) {
+        // Fallback without server-side orderBy if compound index isn't ready
+        const snap = await getDocs(col);
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ActivityLog));
+        return list
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, maxLogs);
+      }
+    } catch (e) {
+      console.warn('Fallback: could not fetch activity logs from Firestore', e);
+      return [];
+    }
+  },
+
   async saveActivityLog(log: ActivityLog): Promise<void> {
     try {
       const ref = doc(db, 'activity_logs', log.id);

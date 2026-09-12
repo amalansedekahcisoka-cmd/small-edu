@@ -160,9 +160,20 @@ if (typeof window !== 'undefined') {
 }
 
 export class DataProvider {
-  // Trigger sinkronisasi server
+  // Trigger sinkronisasi server & cloud firestore
   static async syncWithServer(): Promise<void> {
-    await fetchServerData();
+    try {
+      await Promise.allSettled([
+        fetchServerData(),
+        this.getUsersAsync(),
+        this.getClassesAsync(),
+        this.getCoursesAsync(),
+        this.getActivityLogsAsync(),
+        this.getSubmissionsAsync(),
+      ]);
+    } catch (e) {
+      console.warn('syncWithServer error:', e);
+    }
   }
 
   // --- DATABASE KELAS ---
@@ -316,7 +327,20 @@ export class DataProvider {
   }
 
   static async getUsersAsync(): Promise<User[]> {
-    const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []));
+    // 0. Sinkronkan ID pengguna yang dihapus dari Cloud Firestore
+    let allDeletedList = safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []);
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreDeleted = await FirestoreService.getDeletedUserIds();
+        if (Array.isArray(firestoreDeleted) && firestoreDeleted.length > 0) {
+          allDeletedList = Array.from(new Set([...allDeletedList, ...firestoreDeleted]));
+          safeSetItem(STORAGE_KEYS.DELETED_USERS, allDeletedList);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    const deletedIds = new Set(allDeletedList);
 
     // 1. Prioritaskan Cloud Firestore jika terkonfigurasi (agar multi-device langsung sinkron)
     if (isFirebaseConfigured) {
@@ -326,13 +350,11 @@ export class DataProvider {
           const valid = firestoreUsers.filter((u) => !deletedIds.has(u.id));
           if (valid.length > 0) {
             const userMap = new Map<string, User>();
+            // Masukkan akun superadmin & guru bawaan jika belum ada di firestore
             MOCK_USERS.forEach((u) => {
               if (!deletedIds.has(u.id)) userMap.set(u.id, u);
             });
-            const stored = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
-            stored.forEach((u) => {
-              if (!deletedIds.has(u.id)) userMap.set(u.id, { ...userMap.get(u.id), ...u });
-            });
+            // Overwrite dan tambahkan dari Cloud Firestore (source of truth terpercaya)
             valid.forEach((u) => {
               if (!deletedIds.has(u.id)) userMap.set(u.id, { ...userMap.get(u.id), ...u });
             });
@@ -719,6 +741,21 @@ export class DataProvider {
     return safeGetItem(STORAGE_KEYS.SUBMISSIONS, MOCK_SUBMISSIONS);
   }
 
+  static async getSubmissionsAsync(): Promise<Submission[]> {
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreSubs = await FirestoreService.getSubmissions();
+        if (Array.isArray(firestoreSubs) && firestoreSubs.length > 0) {
+          safeSetItem(STORAGE_KEYS.SUBMISSIONS, firestoreSubs);
+          return firestoreSubs;
+        }
+      } catch (e) {
+        console.warn('Firestore getSubmissions error in DataProvider:', e);
+      }
+    }
+    return this.getSubmissions();
+  }
+
   static saveSubmission(sub: Omit<Submission, 'id' | 'submittedAt'>): Submission {
     const subs = this.getSubmissions();
     const newSub: Submission = {
@@ -1037,6 +1074,43 @@ export class DataProvider {
   }
 
   static async getActivityLogsAsync(): Promise<ActivityLog[]> {
+    const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []));
+
+    // 1. Prioritaskan Cloud Firestore agar aktivitas siswa dari browser/device lain langsung terlihat guru
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreLogs = await FirestoreService.getActivityLogs(200);
+        if (Array.isArray(firestoreLogs) && firestoreLogs.length > 0) {
+          const logMap = new Map<string, ActivityLog>();
+          const localLogs = safeGetItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITY_LOGS, []);
+
+          // Tambahkan log dari firestore
+          firestoreLogs.forEach((l) => {
+            if (l && l.id && !deletedIds.has(l.userId)) {
+              logMap.set(l.id, l);
+            }
+          });
+
+          // Gabungkan log lokal yang mungkin baru dibuat offline
+          localLogs.forEach((l) => {
+            if (l && l.id && !deletedIds.has(l.userId) && !logMap.has(l.id)) {
+              logMap.set(l.id, l);
+            }
+          });
+
+          const merged = Array.from(logMap.values())
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 300);
+
+          safeSetItem(STORAGE_KEYS.ACTIVITY_LOGS, merged);
+          return merged;
+        }
+      } catch (e) {
+        console.warn('Firestore getActivityLogs error in DataProvider:', e);
+      }
+    }
+
+    // 2. Fallback server API data
     await fetchServerData();
     return this.getActivityLogs();
   }

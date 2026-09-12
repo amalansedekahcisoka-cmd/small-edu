@@ -58,10 +58,12 @@ export default function TeacherActivityLogPage() {
     try {
       await DataProvider.syncWithServer();
       const me = DataProvider.getCurrentUser();
-      const allLogs = DataProvider.getActivityLogs();
-      const allClasses = DataProvider.getClasses();
-      const allUsers = DataProvider.getUsers();
-      const allCourses = DataProvider.getCourses();
+      const [allLogs, allClasses, allUsers, allCourses] = await Promise.all([
+        DataProvider.getActivityLogsAsync(),
+        DataProvider.getClassesAsync(),
+        DataProvider.getUsersAsync(),
+        DataProvider.getCoursesAsync(),
+      ]);
 
       // Dapatkan hanya kelas-kelas yang diampu oleh Guru yang sedang login
       let taughtClassNames: string[] = [];
@@ -114,7 +116,7 @@ export default function TeacherActivityLogPage() {
     loadData();
     const interval = setInterval(() => {
       loadData();
-    }, 2500);
+    }, 6000);
     return () => clearInterval(interval);
   }, []);
 

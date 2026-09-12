@@ -28,10 +28,10 @@ export default function TeacherGradingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
 
-  const loadSubmissions = () => {
+  const loadSubmissions = async () => {
     const currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
-    const all = DataProvider.getSubmissions();
+    const all = await DataProvider.getSubmissionsAsync();
     setSubmissions(all);
     if (all.length > 0 && !selectedSub) {
       setSelectedSub(all[0]);

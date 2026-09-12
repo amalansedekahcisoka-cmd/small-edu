@@ -141,6 +141,16 @@ export default function TeacherDashboard() {
         setCourses(serverCourses);
       }
     });
+    DataProvider.getSubmissionsAsync().then((serverSubs) => {
+      if (serverSubs) {
+        setPendingSubs(serverSubs.filter((s) => s.status === 'pending'));
+      }
+    });
+    DataProvider.getClassesAsync().then((serverClasses) => {
+      if (serverClasses && serverClasses.length > 0) {
+        setAvailableClasses(serverClasses);
+      }
+    });
   }, []);
 
   const handleSelectCourse = (c: Course) => {
