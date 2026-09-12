@@ -112,10 +112,10 @@ export default function StudentDashboard() {
 
   useEffect(() => {
     loadDashboard();
-    DataProvider.getCoursesAsync().then(() => {
+    DataProvider.syncWithServer().then(() => {
       loadDashboard();
-    });
-    const interval = setInterval(loadDashboard, 3000);
+    }).catch(console.error);
+    const interval = setInterval(loadDashboard, 4000);
     return () => clearInterval(interval);
   }, []);
 

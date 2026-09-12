@@ -220,6 +220,17 @@ export const FirestoreService = {
   },
 
   // --- PROGRESS ---
+  async getAllUserProgress(): Promise<UserCourseProgress[]> {
+    try {
+      const col = collection(db, 'user_progress');
+      const snap = await getDocs(col);
+      return snap.docs.map((d) => d.data() as UserCourseProgress);
+    } catch (e) {
+      console.warn('Fallback: could not fetch all progress from Firestore', e);
+      return [];
+    }
+  },
+
   async getUserProgress(userId: string, courseId: string): Promise<UserCourseProgress | null> {
     try {
       const key = `${userId}_${courseId}`;

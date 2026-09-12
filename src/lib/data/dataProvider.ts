@@ -170,9 +170,28 @@ export class DataProvider {
         this.getCoursesAsync(),
         this.getActivityLogsAsync(),
         this.getSubmissionsAsync(),
+        this.syncAllProgressAsync(),
       ]);
     } catch (e) {
       console.warn('syncWithServer error:', e);
+    }
+  }
+
+  static async syncAllProgressAsync(): Promise<void> {
+    if (isFirebaseConfigured) {
+      try {
+        const allProgress = await FirestoreService.getAllUserProgress();
+        if (Array.isArray(allProgress) && allProgress.length > 0) {
+          allProgress.forEach((p) => {
+            if (p && p.userId && p.courseId) {
+              const key = `${STORAGE_KEYS.PROGRESS_PREFIX}${p.userId}_${p.courseId}`;
+              safeSetItem(key, p);
+            }
+          });
+        }
+      } catch (e) {
+        console.warn('Error syncing progress from Firestore:', e);
+      }
     }
   }
 
@@ -354,9 +373,41 @@ export class DataProvider {
             MOCK_USERS.forEach((u) => {
               if (!deletedIds.has(u.id)) userMap.set(u.id, u);
             });
+
+            // Baca XP & bintang lokal yang mungkin sudah diraih siswa
+            const localUsers = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+            const localPointsMap = new Map<string, { points: number; stars: number }>();
+            localUsers.forEach((lu) => {
+              if (lu && lu.id && ((lu.activityPoints || 0) > 0 || (lu.starsCount || 0) > 0)) {
+                localPointsMap.set(lu.id, { points: lu.activityPoints || 0, stars: lu.starsCount || 0 });
+              }
+            });
+
             // Overwrite dan tambahkan dari Cloud Firestore (source of truth terpercaya)
             valid.forEach((u) => {
-              if (!deletedIds.has(u.id)) userMap.set(u.id, { ...userMap.get(u.id), ...u });
+              if (!deletedIds.has(u.id)) {
+                const localPts = localPointsMap.get(u.id);
+                const finalPoints = Math.max(u.activityPoints || 0, localPts?.points || 0);
+                const finalStars = Math.max(u.starsCount || 0, localPts?.stars || 0);
+                const mergedUser: User = {
+                  ...userMap.get(u.id),
+                  ...u,
+                  activityPoints: finalPoints,
+                  starsCount: finalStars,
+                };
+                userMap.set(u.id, mergedUser);
+
+                // Jika data lokal memiliki poin/bintang lebih tinggi, sinkronkan balik ke Firestore
+                if (
+                  (localPts?.points || 0) > (u.activityPoints || 0) ||
+                  (localPts?.stars || 0) > (u.starsCount || 0)
+                ) {
+                  FirestoreService.updateUser(u.id, {
+                    activityPoints: finalPoints,
+                    starsCount: finalStars,
+                  }).catch(console.error);
+                }
+              }
             });
             const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
             safeSetItem(STORAGE_KEYS.USERS, merged);
@@ -892,6 +943,7 @@ export class DataProvider {
       userId,
       updates: { activityPoints: newPoints, starsCount: newStars },
     });
+    FirestoreService.updateUser(userId, { activityPoints: newPoints, starsCount: newStars }).catch(console.error);
 
     const currentUser = this.getCurrentUser();
     if (currentUser.id === userId) {
@@ -1010,6 +1062,7 @@ export class DataProvider {
         userId,
         updates: { activityPoints: calculatedPoints, starsCount: user.starsCount },
       });
+      FirestoreService.updateUser(userId, { activityPoints: calculatedPoints, starsCount: user.starsCount }).catch(console.error);
 
       const current = safeGetItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
       if (current && current.id === userId) {

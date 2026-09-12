@@ -39,6 +39,7 @@ export default function TeacherActivityLogPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
+  const [progressMap, setProgressMap] = useState<Record<string, UserCourseProgress>>({});
 
   // Filter States
   const [selectedClass, setSelectedClass] = useState<string>('ALL');
@@ -119,6 +120,26 @@ export default function TeacherActivityLogPage() {
     }, 6000);
     return () => clearInterval(interval);
   }, []);
+
+  // Ambil progres belajar siswa langsung dari Cloud Firestore saat siswa dipilih
+  useEffect(() => {
+    if (selectedStudentId !== 'ALL') {
+      const student = students.find((s) => s.id === selectedStudentId);
+      const studentCourses = courses.filter((c) => {
+        if (!student?.gradeClass) return true;
+        return !c.targetClasses || c.targetClasses.length === 0 || c.targetClasses.includes(student.gradeClass);
+      });
+      const pMap: Record<string, UserCourseProgress> = {};
+      Promise.all(
+        studentCourses.map(async (c) => {
+          const p = await DataProvider.getUserProgressAsync(selectedStudentId, c.id);
+          pMap[c.id] = p;
+        })
+      ).then(() => {
+        setProgressMap((prev) => ({ ...prev, ...pMap }));
+      }).catch(console.error);
+    }
+  }, [selectedStudentId, courses, students]);
 
   // Filter student dropdown options based on selected class
   const availableStudentsForDropdown = useMemo(() => {
@@ -474,7 +495,7 @@ export default function TeacherActivityLogPage() {
               <div className="space-y-4">
                 {studentApplicableCourses.map((course) => {
                   const courseChapters = DataProvider.getChapters(course.id);
-                  const progress: UserCourseProgress = DataProvider.getUserProgress(activeStudent.id, course.id);
+                  const progress: UserCourseProgress = progressMap[course.id] || DataProvider.getUserProgress(activeStudent.id, course.id);
                   const completedCount = courseChapters.filter(
                     (ch) => progress.chapters && progress.chapters[ch.id]?.is_completed
                   ).length;
