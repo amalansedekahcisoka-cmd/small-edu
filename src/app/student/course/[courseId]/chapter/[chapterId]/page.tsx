@@ -740,7 +740,7 @@ export default function ChapterPlayerPage() {
                     variant="teal"
                     icon={<UploadCloud className="w-4 h-4" />}
                   >
-                    Kumpulkan Tugas ke Guru 🚀
+                    Kumpulkan Tugas ke Guru
                   </RetroButton>
                 </div>
               </form>

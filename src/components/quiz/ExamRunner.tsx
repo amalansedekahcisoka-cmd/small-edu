@@ -305,7 +305,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
                 onClick={handleStartExam}
                 icon={<Clock className="w-5 h-5" />}
               >
-                Mulai Kerjakan Ujian Sekarang ({chapter.durationMinutes || 20} Menit) 🚀
+                Mulai Kerjakan Ujian Sekarang ({chapter.durationMinutes || 20} Menit)
               </RetroButton>
             </div>
           )}

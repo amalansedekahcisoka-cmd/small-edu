@@ -443,7 +443,7 @@ function AdminContent() {
 
                 <div className="pt-2">
                   <RetroButton type="submit" variant="teal" className="w-full" size="sm" icon={<Plus className="w-4 h-4" />}>
-                    Simpan Data Kelas 🚀
+                    Simpan Data Kelas
                   </RetroButton>
                 </div>
               </form>
@@ -566,7 +566,7 @@ function AdminContent() {
 
                 <div className="pt-2">
                   <RetroButton type="submit" variant="teal" className="w-full" size="sm" icon={<Plus className="w-4 h-4" />}>
-                    Daftarkan Guru Baru 🚀
+                    Daftarkan Guru Baru
                   </RetroButton>
                 </div>
               </form>
@@ -721,7 +721,7 @@ function AdminContent() {
 
                 <div className="pt-2">
                   <RetroButton type="submit" variant="teal" className="w-full" size="sm" icon={<Plus className="w-4 h-4" />}>
-                    Daftarkan Siswa Baru 🚀
+                    Daftarkan Siswa Baru
                   </RetroButton>
                 </div>
               </form>

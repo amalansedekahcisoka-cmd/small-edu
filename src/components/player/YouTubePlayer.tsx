@@ -288,7 +288,7 @@ export const YouTubePlayer: React.FC<YouTubePlayerProps> = ({
               {alreadyCompleted
                 ? 'Materi Video Telah Diselesaikan'
                 : isEligible
-                ? 'Selesai & Buka Sub-Bab Berikutnya 🚀'
+                ? 'Selesai & Buka Sub-Bab Berikutnya'
                 : `Tonton Min. ${minWatchPercentage}% Untuk Membuka (${watchPercent}%)`}
             </RetroButton>
           </div>

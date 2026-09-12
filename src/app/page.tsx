@@ -195,7 +195,7 @@ export default function HomePage() {
                   className="w-full"
                   icon={<LogIn className="w-4 h-4" />}
                 >
-                  {isLoading ? 'Memverifikasi...' : 'Masuk ke Portal LMS 🚀'}
+                  {isLoading ? 'Memverifikasi...' : 'Masuk ke Portal LMS'}
                 </RetroButton>
               </div>
             </form>

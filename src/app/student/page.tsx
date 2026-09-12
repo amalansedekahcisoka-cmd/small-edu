@@ -178,7 +178,7 @@ export default function StudentDashboard() {
             <span className="text-xs font-mono font-bold text-teal-100">{user.gradeClass}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white">
-            Selamat Datang, {user.name}! 🚀
+            Selamat Datang, {user.name}!
           </h1>
           <p className="text-sm font-sans text-teal-50 max-w-2xl">
             Sistem pembelajaran ini menerapkan <strong>Sequential Learning Path</strong>. Selesaikan setiap bab secara berurutan dan raih bintang prestasi!
@@ -463,7 +463,7 @@ export default function StudentDashboard() {
                                               size="sm"
                                               icon={<ArrowRight className="w-4 h-4" />}
                                             >
-                                              {isCompleted ? 'Pelajari Ulang' : isAssignmentChild ? 'Kerjakan Tugas ✍️' : 'Buka Materi 🚀'}
+                                              {isCompleted ? 'Pelajari Ulang' : isAssignmentChild ? 'Kerjakan Tugas ✍️' : 'Buka Materi'}
                                             </RetroButton>
                                           </Link>
                                         ) : (

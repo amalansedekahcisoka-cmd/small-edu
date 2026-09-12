@@ -300,7 +300,7 @@ export default function TeacherGradingPage() {
                       onClick={handleApprove}
                       icon={<CheckCircle2 className="w-4 h-4 text-emerald-800" />}
                     >
-                      Sahkan & Setujui Nilai Siswa 🚀
+                      Sahkan & Setujui Nilai Siswa
                     </RetroButton>
                   </div>
                 </div>

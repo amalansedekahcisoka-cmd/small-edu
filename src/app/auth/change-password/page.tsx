@@ -120,7 +120,7 @@ export default function ChangePasswordPage() {
 
               <div className="pt-2">
                 <RetroButton type="submit" variant="teal" className="w-full">
-                  Simpan Kata Sandi Baru & Lanjutkan 🚀
+                  Simpan Kata Sandi Baru & Lanjutkan
                 </RetroButton>
               </div>
             </form>

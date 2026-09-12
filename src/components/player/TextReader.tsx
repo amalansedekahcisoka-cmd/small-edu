@@ -203,7 +203,7 @@ export const TextReader: React.FC<TextReaderProps> = ({
             {alreadyCompleted
               ? 'Modul Ini Telah Selesai'
               : isEligible
-              ? 'Selesaikan Bab 2 & Buka Bab 3 🚀'
+              ? 'Selesaikan Bab 2 & Buka Bab 3'
               : 'Baca Hingga Tuntas Untuk Membuka'}
           </RetroButton>
         </div>

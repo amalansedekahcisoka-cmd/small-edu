@@ -1496,7 +1496,7 @@ export default function TeacherDashboard() {
                     size="sm"
                     icon={<CheckCircle2 className="w-4 h-4" />}
                   >
-                    {editingChapterId ? 'Simpan Perubahan' : 'Terbitkan ke Kurikulum 🚀'}
+                    {editingChapterId ? 'Simpan Perubahan' : 'Terbitkan ke Kurikulum'}
                   </RetroButton>
                 </div>
               </form>
