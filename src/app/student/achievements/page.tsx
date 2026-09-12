@@ -8,19 +8,32 @@ import { RetroWindow } from '@/components/ui/RetroWindow';
 import { RetroButton } from '@/components/ui/RetroButton';
 import { RetroBadge } from '@/components/ui/RetroBadge';
 import { Star, Award, Zap, Flame, Clock, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 export default function StudentAchievementsPage() {
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['student', 'teacher', 'admin'],
+  });
   const [user, setUser] = useState<User | null>(null);
   const [achievements, setAchievements] = useState<StarAchievement[]>([]);
 
   useEffect(() => {
     const currentUser = DataProvider.getCurrentUser();
-    setUser(currentUser);
-    const achs = DataProvider.getAchievements(currentUser.id);
-    setAchievements(achs);
+    if (currentUser) {
+      setUser(currentUser);
+      const achs = DataProvider.getAchievements(currentUser.id);
+      setAchievements(achs);
+    }
   }, []);
 
-  if (!user) return null;
+  if (isAuthLoading || !isAuthorized || !user) {
+    return (
+      <div className="max-w-5xl mx-auto px-4 py-16 font-mono text-center flex flex-col items-center justify-center gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi sesi prestasi...</span>
+      </div>
+    );
+  }
 
   const getCategoryIcon = (category: string) => {
     switch (category) {

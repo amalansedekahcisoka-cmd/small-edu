@@ -49,6 +49,8 @@ export const Navbar: React.FC = () => {
     } catch (_) {}
     if (typeof window !== 'undefined') {
       localStorage.removeItem('smalledu_current_user');
+      document.cookie = 'smalledu_session=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+      document.cookie = 'smalledu_role=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
     setCurrentUser(null);
     router.push('/');
@@ -61,7 +63,7 @@ export const Navbar: React.FC = () => {
     <header className="sticky top-0 z-50 bg-[#dfdbd2] border-b-[2.5px] border-black neo-shadow-sm select-none">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between flex-wrap gap-3">
         {/* Brand Logo */}
-        <Link href={isLoginPage ? '/' : currentUser?.role === 'admin' ? '/admin' : currentUser?.role === 'teacher' ? '/teacher' : '/student'} className="flex items-center gap-2.5 group">
+        <Link href={isLoginPage || !currentUser ? '/' : currentUser.role === 'admin' ? '/admin' : currentUser.role === 'teacher' ? '/teacher' : '/student'} className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 bg-[#008080] text-white neo-border neo-shadow-sm flex items-center justify-center font-black text-xl group-hover:bg-[#006666] transition-colors">
             S
           </div>
@@ -78,14 +80,14 @@ export const Navbar: React.FC = () => {
           </div>
         </Link>
 
-        {/* If on Login Page, show simple secure badge */}
-        {isLoginPage ? (
+        {/* If on Login Page or no user, show simple secure badge */}
+        {isLoginPage || !currentUser ? (
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-zinc-600 bg-white px-2.5 py-1 neo-border-sm font-bold">
               PORTAL LOGIN RESMI
             </span>
           </div>
-        ) : currentUser ? (
+        ) : (
           <>
             {/* Dynamic Navigation Links based on Role */}
             <nav className="flex items-center gap-2 flex-wrap text-sm font-bold">
@@ -232,7 +234,7 @@ export const Navbar: React.FC = () => {
               </div>
             </div>
           </>
-        ) : null}
+        )}
       </div>
     </header>
   );

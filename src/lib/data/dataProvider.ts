@@ -289,7 +289,7 @@ export class DataProvider {
     FirestoreService.updateUser(userId, updates).catch(console.error);
 
     const current = this.getCurrentUser();
-    if (current.id === userId) {
+    if (current && current.id === userId) {
       this.setCurrentUser({ ...current, ...updates });
     }
   }
@@ -459,10 +459,9 @@ export class DataProvider {
     }
   }
 
-  static getCurrentUser(): User {
-    const defaultUser = MOCK_USERS[0]; // Superadmin
+  static getCurrentUser(): User | null {
     const current = safeGetItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
-    if (!current) return defaultUser;
+    if (!current) return null;
     const users = this.getUsers();
     const latest = users.find((u) => u.id === current.id);
     if (latest) {
@@ -487,7 +486,7 @@ export class DataProvider {
     postServerAction('UPDATE_USER', { userId, updates: { password: newPassword, mustChangePassword: false } });
 
     const current = this.getCurrentUser();
-    if (current.id === userId) {
+    if (current && current.id === userId) {
       this.setCurrentUser({ ...current, password: newPassword, mustChangePassword: false });
     }
 
@@ -867,10 +866,38 @@ export class DataProvider {
       target.studentName,
       'student',
       'SUBMISSION_GRADED',
-      `Tugas/Kuis diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore}.`,
+      `Tugas/Kuis diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (${isPassed ? 'Lulus' : 'Belum Lulus'}).`,
       target.courseId,
       target.chapterId
     );
+
+    // KONEKSI SKOR XP: Jika siswa lulus dan bab ini belum pernah klaim XP, berikan XP
+    if (isPassed) {
+      const studentProgress = this.getUserProgress(target.studentId, target.courseId);
+      const chProgress = studentProgress.chapters?.[target.chapterId];
+      if (!chProgress?.xpClaimed) {
+        const chapters = this.getChapters(target.courseId);
+        const chapter = chapters.find((c) => c.id === target.chapterId);
+        const starSettings = this.getCourseStarSettings(target.courseId);
+
+        let basePoints = chapter?.activityRewardPoints;
+        if (!basePoints) {
+          basePoints = chapter?.type === 'quiz'
+            ? (starSettings.defaultQuizXp ?? 30)
+            : (starSettings.defaultAssignmentXp ?? 30);
+        }
+
+        this.addActivityPoints(
+          target.studentId,
+          basePoints,
+          'Penilaian Guru Tuntas',
+          `Hasil evaluasi ${chapter?.title || 'Tugas/Ujian'} oleh ${teacherName} dinyatakan lulus dengan nilai ${finalScore}`,
+          'ACADEMIC_EXCELLENCE',
+          target.courseId,
+          target.chapterId
+        );
+      }
+    }
 
     return updated;
   }
@@ -955,7 +982,7 @@ export class DataProvider {
     FirestoreService.updateUser(userId, { activityPoints: newPoints, starsCount: newStars }).catch(console.error);
 
     const currentUser = this.getCurrentUser();
-    if (currentUser.id === userId) {
+    if (currentUser && currentUser.id === userId) {
       this.setCurrentUser({ ...currentUser, activityPoints: newPoints, starsCount: newStars });
     }
 

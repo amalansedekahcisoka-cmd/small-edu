@@ -1,18 +1,45 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataProvider } from '@/lib/data/dataProvider';
 import { RetroWindow } from '@/components/ui/RetroWindow';
 import { RetroButton } from '@/components/ui/RetroButton';
-import { LogIn, AlertCircle, Lock, UserCheck, ShieldCheck } from 'lucide-react';
+import { LogIn, AlertCircle, Lock, UserCheck, ShieldCheck, Info } from 'lucide-react';
 
-export default function HomePage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectParam = searchParams.get('redirect');
+  const authRequired = searchParams.get('auth_required') === '1';
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
+
+  // Jika di browser/device ini user SUDAH memiliki cache sesi aktif, langsung arahkan ke dashboard/redirect target
+  useEffect(() => {
+    const user = DataProvider.getCurrentUser();
+    if (user) {
+      if (user.mustChangePassword) {
+        router.replace('/auth/change-password');
+        return;
+      }
+      if (redirectParam && redirectParam.startsWith('/')) {
+        router.replace(redirectParam);
+      } else if (user.role === 'admin') {
+        router.replace('/admin');
+      } else if (user.role === 'teacher') {
+        router.replace('/teacher');
+      } else {
+        router.replace('/student');
+      }
+      return;
+    }
+    setIsCheckingSession(false);
+  }, [router, redirectParam]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,7 +118,15 @@ export default function HomePage() {
           delete matchedUser.password;
           mustChangePassword = !!found.mustChangePassword;
 
-          // Set client cookie
+          // Set client cookie agar konsisten dengan server proxy
+          const sessionPayload = {
+            id: matchedUser.id,
+            name: matchedUser.name,
+            role: matchedUser.role,
+            exp: Date.now() + 7 * 24 * 60 * 60 * 1000,
+          };
+          const b64 = btoa(JSON.stringify(sessionPayload));
+          document.cookie = `smalledu_session=${b64}; path=/; max-age=604800; SameSite=Lax`;
           document.cookie = `smalledu_role=${matchedUser.role}; path=/; max-age=604800; SameSite=Lax`;
         }
       }
@@ -102,11 +137,17 @@ export default function HomePage() {
         return;
       }
 
-      // Simpan identitas pengguna aktif di dataProvider
+      // Simpan identitas pengguna aktif di dataProvider (cache sesi lokal)
       DataProvider.setCurrentUser(matchedUser);
 
       if (mustChangePassword) {
         router.push('/auth/change-password');
+        return;
+      }
+
+      // Jika ada target redirect tugas/materi sebelumnya yang dicopas, arahkan langsung ke sana!
+      if (redirectParam && redirectParam.startsWith('/')) {
+        router.push(redirectParam);
         return;
       }
 
@@ -120,6 +161,14 @@ export default function HomePage() {
       setIsLoading(false);
     }
   };
+
+  if (isCheckingSession) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600">
+        Memeriksa sesi login...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-12">
@@ -145,6 +194,16 @@ export default function HomePage() {
               </p>
             </div>
 
+            {/* Info Notice jika diarahkan karena akses rute terproteksi */}
+            {authRequired && (
+              <div className="p-3 bg-[#fffbe6] neo-border-sm text-amber-950 font-mono text-xs flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Sesi Diperlukan:</strong> Silakan masuk dengan akun Anda untuk mengakses materi atau tugas tersebut.
+                </span>
+              </div>
+            )}
+
             {/* Error Message */}
             {error && (
               <div className="p-3 bg-[#fff1f0] neo-border-sm text-red-900 font-mono text-xs flex items-start gap-2">
@@ -158,12 +217,12 @@ export default function HomePage() {
               <div>
                 <label className="block font-bold mb-1.5 text-black flex items-center gap-1.5">
                   <UserCheck className="w-3.5 h-3.5" />
-                  Email / ID Pengguna:
+                  Email / NISN / NIP:
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="Masukkan email"
+                  placeholder="Masukkan Email, NISN, atau NIP"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full p-2.5 neo-border-sm bg-white text-sm focus:bg-[#f0fdfa] focus:border-[#008080] focus:outline-none"
@@ -179,7 +238,7 @@ export default function HomePage() {
                 <input
                   type="password"
                   required
-                  placeholder="Masukkan password"
+                  placeholder="Masukkan kata sandi"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full p-2.5 neo-border-sm bg-white text-sm focus:bg-[#f0fdfa] focus:border-[#008080] focus:outline-none"
@@ -210,5 +269,19 @@ export default function HomePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[80vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600">
+          Memuat halaman login...
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -37,8 +37,12 @@ import {
   Sliders,
   FileSpreadsheet,
 } from 'lucide-react';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 export default function TeacherDashboard() {
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['teacher', 'admin'],
+  });
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -555,6 +559,15 @@ export default function TeacherDashboard() {
     loadData(created);
     setTimeout(() => setNotification(null), 6000);
   };
+
+  if (isAuthLoading || !isAuthorized || !user) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi sesi guru...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">

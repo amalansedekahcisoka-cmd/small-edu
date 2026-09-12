@@ -7,6 +7,7 @@ import { User, ClassRoom } from '@/types';
 import { RetroWindow } from '@/components/ui/RetroWindow';
 import { RetroButton } from '@/components/ui/RetroButton';
 import { RetroBadge } from '@/components/ui/RetroBadge';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import {
   Users,
   GraduationCap,
@@ -24,6 +25,9 @@ import {
 } from 'lucide-react';
 
 function AdminContent() {
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['admin'],
+  });
   const searchParams = useSearchParams();
   const router = useRouter();
   const tabParam = searchParams.get('tab') || 'overview';
@@ -255,6 +259,15 @@ function AdminContent() {
   const handleDeleteStudent = (student: User) => {
     setDeleteConfirm({ type: 'siswa', id: student.id, name: student.name });
   };
+
+  if (isAuthLoading || !isAuthorized) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi hak akses administrator...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">

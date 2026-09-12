@@ -10,6 +10,7 @@ import { BabReportPdfModal } from '@/components/report/BabReportPdfModal';
 import { RetroWindow } from '@/components/ui/RetroWindow';
 import { RetroButton } from '@/components/ui/RetroButton';
 import { RetroBadge } from '@/components/ui/RetroBadge';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 import {
   BookOpen,
   CheckCircle2,
@@ -32,6 +33,9 @@ import {
 
 export default function StudentDashboard() {
   const router = useRouter();
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['student', 'admin', 'teacher'],
+  });
   const [user, setUser] = useState<User | null>(null);
   const [course, setCourse] = useState<Course | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
@@ -42,20 +46,22 @@ export default function StudentDashboard() {
 
   const loadDashboard = () => {
     let currentUser = DataProvider.getCurrentUser();
-    if (currentUser?.id) {
-      DataProvider.syncUserActivityPoints(currentUser.id);
-      currentUser = DataProvider.getCurrentUser();
-    }
+    if (!currentUser) return;
+
+    DataProvider.syncUserActivityPoints(currentUser.id);
+    currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
 
+    if (!currentUser) return;
+
     // Guru diarahkan kembali ke panel guru jika mengakses halaman siswa
-    if (currentUser?.role === 'teacher') {
+    if (currentUser.role === 'teacher') {
       router.replace('/teacher');
       return;
     }
 
     // Redirect jika wajib ganti password
-    if (currentUser?.mustChangePassword) {
+    if (currentUser.mustChangePassword) {
       router.push('/auth/change-password');
       return;
     }
@@ -119,10 +125,11 @@ export default function StudentDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  if (!user) {
+  if (isAuthLoading || !isAuthorized || !user) {
     return (
-      <div className="p-8 text-center font-mono font-bold">
-        Memuat data pembelajaran siswa...
+      <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi sesi siswa...</span>
       </div>
     );
   }

@@ -19,8 +19,12 @@ import {
   X,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { useAuthGuard } from '@/hooks/useAuthGuard';
 
 export default function TeacherGradingPage() {
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['teacher', 'admin'],
+  });
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
   const [teacherScore, setTeacherScore] = useState<number>(85);
@@ -82,6 +86,15 @@ export default function TeacherGradingPage() {
       setTimeout(() => setNotification(null), 5000);
     }
   };
+
+  if (isAuthLoading || !isAuthorized || !user) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center font-mono text-sm font-bold text-zinc-600 gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi sesi guru...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">

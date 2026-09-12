@@ -28,9 +28,14 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
-export default function ChapterPlayerPage() {
+import { useAuthGuard } from '@/hooks/useAuthGuard';
+
+export default function ChapterViewPage() {
   const params = useParams();
   const router = useRouter();
+  const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
+    allowedRoles: ['student', 'teacher', 'admin'],
+  });
   const courseId = params.courseId as string;
   const chapterId = params.chapterId as string;
 
@@ -59,12 +64,14 @@ export default function ChapterPlayerPage() {
       DataProvider.syncUserActivityPoints(currentUser.id);
       currentUser = DataProvider.getCurrentUser();
       setUser(currentUser);
-      const p = DataProvider.getUserProgress(currentUser.id, courseId);
-      setProgress(p);
+      if (currentUser) {
+        const p = DataProvider.getUserProgress(currentUser.id, courseId);
+        setProgress(p);
 
-      DataProvider.getUserProgressAsync(currentUser.id, courseId).then((asyncP) => {
-        if (asyncP) setProgress(asyncP);
-      }).catch(() => {});
+        DataProvider.getUserProgressAsync(currentUser.id, courseId).then((asyncP) => {
+          if (asyncP) setProgress(asyncP);
+        }).catch(() => {});
+      }
     }
   };
 
@@ -72,10 +79,11 @@ export default function ChapterPlayerPage() {
     loadData();
   }, [courseId, chapterId]);
 
-  if (!user || !course || !chapter) {
+  if (isAuthLoading || !isAuthorized || !user || !course || !chapter) {
     return (
-      <div className="max-w-4xl mx-auto p-8 font-mono text-center">
-        Memuat konten pembelajaran...
+      <div className="max-w-4xl mx-auto p-8 font-mono text-center flex flex-col items-center justify-center gap-2">
+        <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+        <span>Memverifikasi sesi & konten pembelajaran...</span>
       </div>
     );
   }

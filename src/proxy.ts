@@ -40,6 +40,7 @@ export function proxy(request: NextRequest) {
   // 1. Jika belum login sama sekali, lempar ke halaman login
   if (!session) {
     const loginUrl = new URL('/', request.url);
+    loginUrl.searchParams.set('redirect', pathname);
     loginUrl.searchParams.set('auth_required', '1');
     return NextResponse.redirect(loginUrl);
   }
