@@ -29,6 +29,9 @@ import {
   Video,
   Link as LinkIcon,
   Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Award,
 } from 'lucide-react';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 
@@ -257,6 +260,109 @@ export default function TeacherActivityLogPage() {
       return true;
     });
   }, [logs, selectedClass, selectedStudentId, selectedCategory, searchQuery, userMap]);
+
+  // View Mode: 'grouped' (Accordion kartu per siswa - Simpel & Elegan) vs 'raw' (Semua Riwayat Log)
+  const [viewMode, setViewMode] = useState<'grouped' | 'raw'>('grouped');
+  const [expandedStudentIds, setExpandedStudentIds] = useState<Set<string>>(new Set());
+
+  const toggleStudentExpand = (studentId: string) => {
+    setExpandedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(studentId)) {
+        next.delete(studentId);
+      } else {
+        next.add(studentId);
+      }
+      return next;
+    });
+  };
+
+  const expandAllStudents = () => {
+    setExpandedStudentIds(new Set(students.map((s) => s.id)));
+  };
+
+  const collapseAllStudents = () => {
+    setExpandedStudentIds(new Set());
+  };
+
+  // Group filtered logs by student with key milestones and statistics
+  const studentGroupedData = useMemo(() => {
+    const studentMap = new Map<string, {
+      student: User;
+      studentClass: string;
+      logs: ActivityLog[];
+      latestActivityTime: string;
+      completedChaptersCount: number;
+      examSubmissionsCount: number;
+      starsCount: number;
+      activityPoints: number;
+    }>();
+
+    // Inisialisasi daftar siswa yang relevan dengan filter
+    const activeStudentList = students.filter((s) => {
+      if (selectedClass !== 'ALL' && s.gradeClass !== selectedClass) return false;
+      if (selectedStudentId !== 'ALL' && s.id !== selectedStudentId) return false;
+      return true;
+    });
+
+    activeStudentList.forEach((s) => {
+      studentMap.set(s.id, {
+        student: s,
+        studentClass: s.gradeClass || 'Umum',
+        logs: [],
+        latestActivityTime: '',
+        completedChaptersCount: 0,
+        examSubmissionsCount: 0,
+        starsCount: s.starsCount || 0,
+        activityPoints: s.activityPoints || 0,
+      });
+    });
+
+    // Masukkan log ke masing-masing siswa
+    filteredLogs.forEach((log) => {
+      let group = studentMap.get(log.userId);
+      if (!group) {
+        // Siswa mungkin tidak ada di daftar siswa aktif tapi punya log
+        const u = userMap.get(log.userId) || {
+          id: log.userId,
+          name: log.userName,
+          role: 'student',
+          gradeClass: getStudentClass(log),
+        } as User;
+        group = {
+          student: u,
+          studentClass: getStudentClass(log),
+          logs: [],
+          latestActivityTime: log.timestamp,
+          completedChaptersCount: 0,
+          examSubmissionsCount: 0,
+          starsCount: u.starsCount || 0,
+          activityPoints: u.activityPoints || 0,
+        };
+        studentMap.set(log.userId, group);
+      }
+
+      group.logs.push(log);
+      if (!group.latestActivityTime || new Date(log.timestamp) > new Date(group.latestActivityTime)) {
+        group.latestActivityTime = log.timestamp;
+      }
+
+      const act = log.action.toUpperCase();
+      if (act.includes('COMPLETE') || act.includes('SELESAI') || act.includes('TUNTAS')) {
+        group.completedChaptersCount++;
+      }
+      if (act.includes('SUBMIT') || act.includes('UJIAN')) {
+        group.examSubmissionsCount++;
+      }
+    });
+
+    // Urutkan siswa berdasarkan aktivitas terbaru
+    return Array.from(studentMap.values()).sort((a, b) => {
+      const timeA = a.latestActivityTime ? new Date(a.latestActivityTime).getTime() : 0;
+      const timeB = b.latestActivityTime ? new Date(b.latestActivityTime).getTime() : 0;
+      return timeB - timeA;
+    });
+  }, [filteredLogs, students, selectedClass, selectedStudentId, userMap]);
 
   // Selected student details for Susunan Materi & Progress inspector
   const activeStudent = useMemo(() => {
@@ -635,95 +741,285 @@ export default function TeacherActivityLogPage() {
         </RetroWindow>
       )}
 
-      {/* Tabel Riwayat Aktivitas Lengkap */}
+      {/* Bagian Jurnal Rekam Jejak Belajar Siswa */}
       <RetroWindow
-        title={`JURNAL LOG AKTIVITAS SISWA (${filteredLogs.length} REKAMAN)`}
+        title={`JURNAL KEAKTIFAN BELAJAR SISWA (${studentGroupedData.length} SISWA TERPANTAU)`}
         headerColor="navy"
         icon={<Activity className="w-4 h-4 text-yellow-300" />}
+        actions={
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode('grouped')}
+              className={`px-2 py-0.5 text-xs font-mono font-bold neo-border-sm transition-all ${
+                viewMode === 'grouped' ? 'bg-[#ffde59] text-black' : 'bg-white text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              👥 Kartu per Siswa
+            </button>
+            <button
+              onClick={() => setViewMode('raw')}
+              className={`px-2 py-0.5 text-xs font-mono font-bold neo-border-sm transition-all ${
+                viewMode === 'raw' ? 'bg-[#ffde59] text-black' : 'bg-white text-zinc-600 hover:bg-zinc-100'
+              }`}
+            >
+              📋 Riwayat Detail ({filteredLogs.length})
+            </button>
+          </div>
+        }
       >
         <div className="space-y-4">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono neo-border">
-              <thead className="bg-[#dfdbd2] border-b-2 border-black">
-                <tr>
-                  <th className="p-3 whitespace-nowrap">Waktu (WIB)</th>
-                  <th className="p-3 whitespace-nowrap">Kelas</th>
-                  <th className="p-3 whitespace-nowrap">Nama Siswa</th>
-                  <th className="p-3 whitespace-nowrap">Aksi Sistem</th>
-                  <th className="p-3">Rincian Aktivitas & Materi Terkait</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="p-8 text-center bg-white text-zinc-500 font-mono">
-                      {isLoading ? (
-                        <span>Memuat data aktivitas siswa...</span>
-                      ) : (
-                        <div className="space-y-2">
-                          <p className="font-bold text-black text-sm">
-                            Tidak ditemukan aktivitas yang cocok dengan kriteria filter.
-                          </p>
-                          <p className="text-xs text-zinc-600">
-                            Coba ubah opsi pemilihan kelas, nama siswa, atau kata kunci pencarian Anda.
-                          </p>
-                          <button
-                            onClick={resetFilters}
-                            className="text-xs bg-[#ffde59] text-black px-3 py-1 font-bold neo-border-sm hover:bg-yellow-400 mt-2"
-                          >
-                            Tampilkan Semua Data
-                          </button>
+          {/* Header Kontrol Tampilan Kartu Siswa */}
+          {viewMode === 'grouped' && (
+            <div className="flex items-center justify-between flex-wrap gap-2 text-xs font-mono border-b border-black/10 pb-2">
+              <span className="text-zinc-600">
+                Menampilkan rekam jejak ringkas per siswa. Klik kartu siswa untuk membuka / menutup rincian aktivitasnya.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={expandAllStudents}
+                  className="px-2 py-1 bg-white hover:bg-zinc-100 neo-border-sm font-bold text-[11px]"
+                >
+                  Buka Semua Dropdown
+                </button>
+                <button
+                  onClick={collapseAllStudents}
+                  className="px-2 py-1 bg-white hover:bg-zinc-100 neo-border-sm font-bold text-[11px]"
+                >
+                  Tutup Semua
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAMPILAN 1: KARTU SISWA ELEGAN & COLLAPSIBLE (DEFAULT) */}
+          {viewMode === 'grouped' && (
+            <div className="space-y-3">
+              {studentGroupedData.length === 0 ? (
+                <div className="p-8 text-center bg-white neo-border font-mono text-zinc-500 text-xs">
+                  Tidak ditemukan aktivitas siswa dengan filter yang dipilih.
+                </div>
+              ) : (
+                studentGroupedData.map((item) => {
+                  const isExpanded = expandedStudentIds.has(item.student.id);
+                  const hasLogs = item.logs.length > 0;
+
+                  return (
+                    <div
+                      key={item.student.id}
+                      className={`neo-border transition-all bg-white overflow-hidden ${
+                        isExpanded ? 'neo-shadow-sm ring-1 ring-black' : 'hover:bg-zinc-50'
+                      }`}
+                    >
+                      {/* Kartu Ringkasan Siswa (Header Accordion) */}
+                      <div
+                        onClick={() => toggleStudentExpand(item.student.id)}
+                        className="p-3.5 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3 bg-[#fcfaf5] border-b border-black/10"
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Inisial Avatar */}
+                          <div className="w-10 h-10 neo-border-sm bg-[#008080] text-white flex items-center justify-center font-mono font-black text-sm shrink-0">
+                            {item.student.name.charAt(0).toUpperCase()}
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-black text-sm text-black">
+                                {item.student.name}
+                              </h4>
+                              <span className="px-1.5 py-0.2 bg-blue-100 text-blue-900 border border-blue-400 font-mono text-[10px] font-bold">
+                                {item.studentClass}
+                              </span>
+                              {item.student.nisn_nip && (
+                                <span className="text-[10px] font-mono text-zinc-500">
+                                  NISN: {item.student.nisn_nip}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs font-mono text-zinc-600 flex items-center gap-3 mt-1 flex-wrap">
+                              <span>
+                                🕒 Terakhir Aktif:{' '}
+                                <strong>
+                                  {item.latestActivityTime
+                                    ? new Date(item.latestActivityTime).toLocaleString('id-ID', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                      })
+                                    : 'Belum ada'}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span>
+                                📝 Total Aktivitas: <strong>{item.logs.length} kali</strong>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Statistik Singkat & Indikator Dropdown */}
+                        <div className="flex items-center gap-3 self-end md:self-center">
+                          <div className="flex items-center gap-2 font-mono text-xs">
+                            <span className="px-2 py-1 bg-amber-100 text-amber-950 border border-amber-400 font-bold flex items-center gap-1">
+                              ⭐ {item.starsCount} Bintang
+                            </span>
+                            <span className="px-2 py-1 bg-teal-50 text-teal-950 border border-teal-400 font-bold flex items-center gap-1">
+                              ⚡ {item.activityPoints} XP
+                            </span>
+                          </div>
+
+                          <div className="w-7 h-7 neo-border-sm bg-white flex items-center justify-center text-black">
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-black" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-black" />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dropdown Isi: Timeline Aktivitas Penting Siswa */}
+                      {isExpanded && (
+                        <div className="p-4 bg-white space-y-3 font-mono">
+                          <div className="flex items-center justify-between text-xs border-b border-black/10 pb-2">
+                            <span className="font-bold text-zinc-700 flex items-center gap-1.5">
+                              <Sparkles className="w-3.5 h-3.5 text-[#008080]" />
+                              Riwayat & Milestone Belajar Terverifikasi ({item.logs.length}):
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedStudentId(item.student.id);
+                                if (item.studentClass && item.studentClass !== 'Umum') {
+                                  setSelectedClass(item.studentClass);
+                                }
+                              }}
+                              className="text-[11px] text-[#008080] hover:underline font-bold"
+                            >
+                              🔍 Periksa Detail Susunan Materi Bab →
+                            </button>
+                          </div>
+
+                          {item.logs.length === 0 ? (
+                            <div className="text-xs text-zinc-500 italic p-3 text-center bg-zinc-50">
+                              Belum ada catatan aktivitas untuk siswa ini.
+                            </div>
+                          ) : (
+                            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                              {item.logs.map((log) => {
+                                const isStar = log.action.includes('STAR') || log.action.includes('BINTANG') || log.action.includes('XP');
+                                const isExam = log.action.includes('EXAM') || log.action.includes('UJIAN') || log.action.includes('SUBMIT');
+                                const isPass = log.details.includes('Tuntas') || log.details.includes('Lulus');
+
+                                return (
+                                  <div
+                                    key={log.id}
+                                    className={`p-2.5 neo-border-sm text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${
+                                      isStar
+                                        ? 'bg-amber-50 border-amber-300'
+                                        : isExam && isPass
+                                        ? 'bg-emerald-50 border-emerald-300'
+                                        : isExam
+                                        ? 'bg-purple-50 border-purple-300'
+                                        : 'bg-[#fbf9f4]'
+                                    }`}
+                                  >
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <RetroBadge variant={getActionBadgeVariant(log.action)} size="sm">
+                                          {log.action}
+                                        </RetroBadge>
+                                        <span className="text-[11px] text-zinc-500">
+                                          {new Date(log.timestamp).toLocaleTimeString('id-ID', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            second: '2-digit',
+                                          })} WIB
+                                        </span>
+                                      </div>
+                                      <p className="font-sans text-xs text-zinc-900 leading-snug">
+                                        {log.details}
+                                      </p>
+                                    </div>
+
+                                    <div className="text-[10px] text-zinc-500 shrink-0 text-right">
+                                      {new Date(log.timestamp).toLocaleDateString('id-ID', {
+                                        day: '2-digit',
+                                        month: 'short',
+                                        year: 'numeric',
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
                       )}
-                    </td>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* TAMPILAN 2: TABEL RIWAYAT RAW / LENGKAP (BISA DIAKSES JIKA DIBUTUHKAN) */}
+          {viewMode === 'raw' && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono neo-border">
+                <thead className="bg-[#dfdbd2] border-b-2 border-black">
+                  <tr>
+                    <th className="p-3 whitespace-nowrap">Waktu (WIB)</th>
+                    <th className="p-3 whitespace-nowrap">Kelas</th>
+                    <th className="p-3 whitespace-nowrap">Nama Siswa</th>
+                    <th className="p-3 whitespace-nowrap">Aksi Sistem</th>
+                    <th className="p-3">Rincian Aktivitas & Materi Terkait</th>
                   </tr>
-                ) : (
-                  filteredLogs.map((log, idx) => {
-                    const studentClass = getStudentClass(log);
-                    return (
-                      <tr
-                        key={log.id}
-                        className={`border-b border-black hover:bg-yellow-50 transition-colors ${
-                          idx % 2 === 0 ? 'bg-white' : 'bg-[#fbf9f4]'
-                        }`}
-                      >
-                        <td className="p-3 whitespace-nowrap text-zinc-600">
-                          {new Date(log.timestamp).toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span className="font-bold px-2 py-0.5 bg-blue-100 text-blue-900 neo-border-sm text-[11px]">
-                            {studentClass}
-                          </span>
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <button
-                            onClick={() => {
-                              setSelectedStudentId(log.userId);
-                              if (studentClass && studentClass !== 'Umum') {
-                                setSelectedClass(studentClass);
-                              }
-                            }}
-                            className="font-bold text-black hover:text-[#008080] hover:underline text-left"
-                            title="Klik untuk inspeksi susunan materi siswa ini"
-                          >
+                </thead>
+                <tbody>
+                  {filteredLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center bg-white text-zinc-500 font-mono">
+                        Tidak ditemukan aktivitas yang cocok dengan kriteria filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredLogs.map((log, idx) => {
+                      const studentClass = getStudentClass(log);
+                      return (
+                        <tr
+                          key={log.id}
+                          className={`border-b border-black hover:bg-yellow-50 transition-colors ${
+                            idx % 2 === 0 ? 'bg-white' : 'bg-[#fbf9f4]'
+                          }`}
+                        >
+                          <td className="p-3 whitespace-nowrap text-zinc-600">
+                            {new Date(log.timestamp).toLocaleString('id-ID')}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <span className="font-bold px-2 py-0.5 bg-blue-100 text-blue-900 neo-border-sm text-[11px]">
+                              {studentClass}
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap font-bold text-black">
                             {log.userName}
-                          </button>
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <RetroBadge variant={getActionBadgeVariant(log.action)} size="sm">
-                            {log.action}
-                          </RetroBadge>
-                        </td>
-                        <td className="p-3 font-sans text-xs text-zinc-800 leading-relaxed">
-                          {log.details}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            <RetroBadge variant={getActionBadgeVariant(log.action)} size="sm">
+                              {log.action}
+                            </RetroBadge>
+                          </td>
+                          <td className="p-3 font-sans text-xs text-zinc-800 leading-relaxed">
+                            {log.details}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </RetroWindow>
     </div>

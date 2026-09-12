@@ -31,8 +31,10 @@ export default function TeacherGradingPage() {
   const [feedback, setFeedback] = useState<string>('Jawaban sangat baik dan kata kunci esensial lengkap.');
   const [user, setUser] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'pending' | 'graded' | 'all'>('pending');
 
-  const loadSubmissions = async () => {
+  const loadSubmissions = async (preferredStatus?: 'pending' | 'graded' | 'all') => {
+    const activeFilter = preferredStatus || statusFilter;
     const currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
     const [all, allCourses] = await Promise.all([
@@ -49,10 +51,17 @@ export default function TeacherGradingPage() {
     }
 
     setSubmissions(filtered);
-    if (filtered.length > 0 && (!selectedSub || !filtered.some((s) => s.id === selectedSub.id))) {
-      setSelectedSub(filtered[0]);
-      setTeacherScore(filtered[0].finalScore || 85);
-    } else if (filtered.length === 0) {
+
+    // List yang tampil sesuai filter
+    const visibleSubs = activeFilter === 'all'
+      ? filtered
+      : filtered.filter((s) => s.status === activeFilter);
+
+    if (visibleSubs.length > 0 && (!selectedSub || !visibleSubs.some((s) => s.id === selectedSub.id))) {
+      setSelectedSub(visibleSubs[0]);
+      setTeacherScore(visibleSubs[0].finalScore || visibleSubs[0].autoScore || 85);
+      setFeedback(visibleSubs[0].teacherFeedback || 'Jawaban relevan dan memenuhi indikator penilaian.');
+    } else if (visibleSubs.length === 0) {
       setSelectedSub(null);
     }
   };
@@ -132,91 +141,168 @@ export default function TeacherGradingPage() {
             headerColor="gray"
             icon={<ClipboardCheck className="w-4 h-4" />}
           >
-            <div className="space-y-3">
-              {submissions.map((sub) => {
-                const isSelected = selectedSub?.id === sub.id;
-                const isPending = sub.status === 'pending';
-                const isRemedial = sub.attemptNumber === 2;
-                const passingGrade = 75; // Standar target
-                const isPassed = (sub.finalScore || sub.autoScore) >= passingGrade;
+            {/* Filter Tabs Status */}
+            <div className="flex border-b-2 border-black bg-zinc-100 p-1 gap-1 font-mono text-xs">
+              <button
+                onClick={() => {
+                  setStatusFilter('pending');
+                  const pendingSubs = submissions.filter((s) => s.status === 'pending');
+                  if (pendingSubs.length > 0) {
+                    handleSelectSubmission(pendingSubs[0]);
+                  } else {
+                    setSelectedSub(null);
+                  }
+                }}
+                className={`flex-1 py-1.5 px-2 font-bold text-center neo-border-sm transition-all flex items-center justify-center gap-1.5 ${
+                  statusFilter === 'pending'
+                    ? 'bg-[#ffde59] text-black neo-shadow-xs'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                <span>🟡 Menunggu</span>
+                <span className="px-1.5 py-0.2 bg-black text-white text-[10px] rounded-full">
+                  {submissions.filter((s) => s.status === 'pending').length}
+                </span>
+              </button>
 
-                // Cek apakah siswa ini punya pengerjaan lain di bab yang sama
-                const siblingSubs = submissions.filter(
-                  (s) => s.studentId === sub.studentId && s.chapterId === sub.chapterId
-                );
-                const attempt1 = siblingSubs.find((s) => (s.attemptNumber || 1) === 1);
-                const isAttempt1Passed = attempt1 && ((attempt1.finalScore || attempt1.autoScore) >= passingGrade);
+              <button
+                onClick={() => {
+                  setStatusFilter('graded');
+                  const gradedSubs = submissions.filter((s) => s.status === 'graded');
+                  if (gradedSubs.length > 0) {
+                    handleSelectSubmission(gradedSubs[0]);
+                  } else {
+                    setSelectedSub(null);
+                  }
+                }}
+                className={`flex-1 py-1.5 px-2 font-bold text-center neo-border-sm transition-all flex items-center justify-center gap-1.5 ${
+                  statusFilter === 'graded'
+                    ? 'bg-[#79f2c0] text-[#0d4a2b] neo-shadow-xs'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+              >
+                <span>🟢 Disahkan</span>
+                <span className="px-1.5 py-0.2 bg-[#008080] text-white text-[10px] rounded-full">
+                  {submissions.filter((s) => s.status === 'graded').length}
+                </span>
+              </button>
 
-                return (
-                  <div
-                    key={sub.id}
-                    onClick={() => handleSelectSubmission(sub)}
-                    className={`p-3 neo-border-sm cursor-pointer transition-all ${
-                      isSelected
-                        ? 'bg-[#ffde59] neo-shadow-sm ring-2 ring-black'
-                        : 'bg-white hover:bg-zinc-50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm text-black">{sub.studentName}</span>
-                      <div className="flex items-center gap-1">
-                        {isRemedial ? (
-                          <span className="px-1.5 py-0.5 bg-purple-200 text-purple-950 font-mono text-[10px] font-black border border-purple-800">
-                            PERCOBAAN 2 (REMEDIAL)
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-950 font-mono text-[10px] font-black border border-blue-800">
-                            PERCOBAAN 1 (UTAMA)
-                          </span>
-                        )}
-                        <RetroBadge variant={isPending ? 'yellow' : 'green'} size="sm">
-                          {isPending ? 'MENUNGGU' : 'DISAHKAN'}
-                        </RetroBadge>
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  if (submissions.length > 0) {
+                    handleSelectSubmission(submissions[0]);
+                  }
+                }}
+                className={`py-1.5 px-2.5 font-bold text-center neo-border-sm transition-all ${
+                  statusFilter === 'all'
+                    ? 'bg-black text-white'
+                    : 'bg-white text-zinc-600 hover:bg-zinc-50'
+                }`}
+                title="Tampilkan Semua"
+              >
+                Semua ({submissions.length})
+              </button>
+            </div>
+
+            <div className="space-y-3 pt-3">
+              {(() => {
+                const displayedSubs = statusFilter === 'all'
+                  ? submissions
+                  : submissions.filter((s) => s.status === statusFilter);
+
+                if (displayedSubs.length === 0) {
+                  return (
+                    <div className="text-center p-8 bg-zinc-50 neo-border-sm text-xs font-mono space-y-2 text-zinc-600">
+                      <div className="text-2xl">
+                        {statusFilter === 'pending' ? '🎉' : '📂'}
+                      </div>
+                      <p className="font-bold text-black">
+                        {statusFilter === 'pending'
+                          ? 'Tidak Ada Antrean Menunggu!'
+                          : 'Belum Ada Jawaban yang Disahkan'}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        {statusFilter === 'pending'
+                          ? 'Semua lembar ujian siswa telah selesai diperiksa dan disahkan nilainya.'
+                          : 'Klik tab "Menunggu" untuk mengoreksi jawaban siswa.'}
+                      </p>
+                    </div>
+                  );
+                }
+
+                return displayedSubs.map((sub) => {
+                  const isSelected = selectedSub?.id === sub.id;
+                  const isPending = sub.status === 'pending';
+                  const isRemedial = sub.attemptNumber === 2;
+                  const passingGrade = 75; // Standar target
+                  const isPassed = (sub.finalScore || sub.autoScore) >= passingGrade;
+
+                  return (
+                    <div
+                      key={sub.id}
+                      onClick={() => handleSelectSubmission(sub)}
+                      className={`p-3 neo-border-sm cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-[#ffde59] neo-shadow-sm ring-2 ring-black'
+                          : 'bg-white hover:bg-zinc-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm text-black">{sub.studentName}</span>
+                        <div className="flex items-center gap-1">
+                          {isRemedial ? (
+                            <span className="px-1.5 py-0.5 bg-purple-200 text-purple-950 font-mono text-[10px] font-black border border-purple-800">
+                              PERCOBAAN 2 (REMEDIAL)
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-950 font-mono text-[10px] font-black border border-blue-800">
+                              PERCOBAAN 1 (UTAMA)
+                            </span>
+                          )}
+                          <RetroBadge variant={isPending ? 'yellow' : 'green'} size="sm">
+                            {isPending ? 'MENUNGGU' : 'DISAHKAN'}
+                          </RetroBadge>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-200">
+                        <div className="text-xs font-mono">
+                          Skor: <strong className={isPassed ? 'text-emerald-700' : 'text-red-600'}>{sub.finalScore ?? sub.autoScore} / 100</strong>
+                        </div>
+                        <div className="text-[10px] font-mono font-bold">
+                          {isPassed ? (
+                            <span className="text-emerald-800 bg-emerald-100 px-1.5 py-0.5 border border-emerald-400">
+                              ✓ TUNTAS
+                            </span>
+                          ) : isRemedial ? (
+                            <span className="text-purple-900 bg-purple-100 px-1.5 py-0.5 border border-purple-400">
+                              SELESAI (FINAL)
+                            </span>
+                          ) : (
+                            <span className="text-amber-800 bg-amber-100 px-1.5 py-0.5 border border-amber-400">
+                              REMEDIAL TERSEDIA
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Catatan pintar jika percobaan 1 sudah tuntas */}
+                      {!isRemedial && isPassed && (
+                        <div className="mt-1.5 text-[9px] font-mono text-emerald-800 bg-emerald-50 px-2 py-1 border border-emerald-300 flex items-center gap-1">
+                          <span>🔒</span>
+                          <span>Percobaan 1 Tuntas: Percobaan 2 otomatis terkunci.</span>
+                        </div>
+                      )}
+
+                      <div className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
+                        <span>Waktu: {new Date(sub.submittedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span>{new Date(sub.submittedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-200">
-                      <div className="text-xs font-mono">
-                        Skor: <strong className={isPassed ? 'text-emerald-700' : 'text-red-600'}>{sub.finalScore ?? sub.autoScore} / 100</strong>
-                      </div>
-                      <div className="text-[10px] font-mono font-bold">
-                        {isPassed ? (
-                          <span className="text-emerald-800 bg-emerald-100 px-1.5 py-0.5 border border-emerald-400">
-                            ✓ TUNTAS
-                          </span>
-                        ) : isRemedial ? (
-                          <span className="text-purple-900 bg-purple-100 px-1.5 py-0.5 border border-purple-400">
-                            SELESAI (FINAL)
-                          </span>
-                        ) : (
-                          <span className="text-amber-800 bg-amber-100 px-1.5 py-0.5 border border-amber-400">
-                            REMEDIAL TERSEDIA
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Catatan pintar jika percobaan 1 sudah tuntas */}
-                    {!isRemedial && isPassed && (
-                      <div className="mt-1.5 text-[9px] font-mono text-emerald-800 bg-emerald-50 px-2 py-1 border border-emerald-300 flex items-center gap-1">
-                        <span>🔒</span>
-                        <span>Percobaan 1 Tuntas: Percobaan 2 otomatis terkunci.</span>
-                      </div>
-                    )}
-
-                    <div className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
-                      <span>Waktu: {new Date(sub.submittedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-                      <span>{new Date(sub.submittedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {submissions.length === 0 && (
-                <div className="text-center p-6 text-xs font-mono text-zinc-500">
-                  Belum ada jawaban siswa yang dikirimkan.
-                </div>
-              )}
+                  );
+                });
+              })()}
             </div>
           </RetroWindow>
         </div>
