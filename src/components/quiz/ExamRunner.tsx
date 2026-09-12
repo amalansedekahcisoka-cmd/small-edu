@@ -460,6 +460,21 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             </div>
           )}
 
+          {/* KOTAK INFORMASI JIKA TUNTAS PADA PERCOBAAN 1 (REMEDIAL TERKUNCI) */}
+          {!isPending && isPassed && (
+            <div className="bg-[#eefaf3] neo-border p-5 text-center space-y-2">
+              <div className="inline-block px-3 py-1 bg-emerald-700 text-white font-mono font-black text-xs neo-border-sm">
+                KETUNTASAN BELAJAR TERCAPAI
+              </div>
+              <h3 className="font-black text-lg text-emerald-950">
+                Selamat! Anda Telah Tuntas pada Percobaan Pertama
+              </h3>
+              <p className="font-mono text-xs text-emerald-800 max-w-lg mx-auto leading-relaxed">
+                Karena nilai Anda sudah mencapai Target Ketuntasan Belajar, Ujian Remedial <strong>otomatis terkunci</strong> dan tidak perlu ditempuh. Anda dapat langsung melanjutkan ke materi pembelajaran berikutnya!
+              </p>
+            </div>
+          )}
+
           {/* KOTAK AKSI UJIAN REMEDIAL (JIKA BELUM LULUS & MASIH ADA KESEMPATAN) */}
           {!isPending && canRemedial && (
             <div className="bg-[#e6fffa] neo-border p-5 text-center space-y-3">

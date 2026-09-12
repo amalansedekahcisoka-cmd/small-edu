@@ -67,14 +67,15 @@ export default function TeacherGradingPage() {
     setFeedback(sub.teacherFeedback || 'Jawaban relevan dan memenuhi indikator penilaian.');
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedSub || !user) return;
 
-    const updated = DataProvider.approveSubmission(
+    const updated = await DataProvider.approveSubmissionAsync(
       selectedSub.id,
       Number(teacherScore),
       feedback,
-      user.name
+      user.name,
+      selectedSub
     );
 
     if (updated) {
@@ -83,12 +84,12 @@ export default function TeacherGradingPage() {
       const isRemedial = selectedSub.attemptNumber === 2;
       setNotification(
         isPassed
-          ? `Nilai untuk ${selectedSub.studentName} berhasil disahkan (${teacherScore}/100 - LULUS)! Bab berikutnya untuk siswa ini telah terbuka.`
+          ? `Nilai untuk ${selectedSub.studentName} berhasil disahkan (${teacherScore}/100 - TUNTAS)! Bab berikutnya untuk siswa ini telah terbuka.`
           : isRemedial
-          ? `Nilai remedial ${selectedSub.studentName} (${teacherScore}/100) disahkan. Batas kesempatan ujian (2/2) selesai.`
-          : `Nilai ${selectedSub.studentName} (${teacherScore}/100) disahkan. Siswa diberikan 1x kesempatan ujian remedial.`
+          ? `Nilai remedial ${selectedSub.studentName} (${teacherScore}/100) disahkan. Batas kesempatan ujian (2/2) selesai. Bab berikutnya telah terbuka.`
+          : `Nilai ${selectedSub.studentName} (${teacherScore}/100) disahkan. Siswa diberikan 1x kesempatan ujian remedial, dan bab berikutnya telah terbuka.`
       );
-      loadSubmissions();
+      await loadSubmissions();
       setSelectedSub(updated);
 
       setTimeout(() => setNotification(null), 6000);
@@ -124,7 +125,7 @@ export default function TeacherGradingPage() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Submissions Queue */}
+        {/* Left Column: Submissions Queue Grouped by Student & Chapter */}
         <div className="space-y-4">
           <RetroWindow
             title="ANTREAN JAWABAN SISWA"
@@ -136,35 +137,76 @@ export default function TeacherGradingPage() {
                 const isSelected = selectedSub?.id === sub.id;
                 const isPending = sub.status === 'pending';
                 const isRemedial = sub.attemptNumber === 2;
+                const passingGrade = 75; // Standar target
+                const isPassed = (sub.finalScore || sub.autoScore) >= passingGrade;
+
+                // Cek apakah siswa ini punya pengerjaan lain di bab yang sama
+                const siblingSubs = submissions.filter(
+                  (s) => s.studentId === sub.studentId && s.chapterId === sub.chapterId
+                );
+                const attempt1 = siblingSubs.find((s) => (s.attemptNumber || 1) === 1);
+                const isAttempt1Passed = attempt1 && ((attempt1.finalScore || attempt1.autoScore) >= passingGrade);
+
                 return (
                   <div
                     key={sub.id}
                     onClick={() => handleSelectSubmission(sub)}
                     className={`p-3 neo-border-sm cursor-pointer transition-all ${
                       isSelected
-                        ? 'bg-[#ffde59] neo-shadow-sm'
+                        ? 'bg-[#ffde59] neo-shadow-sm ring-2 ring-black'
                         : 'bg-white hover:bg-zinc-50'
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-sm">{sub.studentName}</span>
+                      <span className="font-bold text-sm text-black">{sub.studentName}</span>
                       <div className="flex items-center gap-1">
-                        {isRemedial && (
-                          <span className="px-1.5 py-0.5 bg-purple-200 text-purple-950 font-mono text-[10px] font-bold border border-black">
-                            REMEDIAL
+                        {isRemedial ? (
+                          <span className="px-1.5 py-0.5 bg-purple-200 text-purple-950 font-mono text-[10px] font-black border border-purple-800">
+                            PERCOBAAN 2 (REMEDIAL)
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 bg-blue-100 text-blue-950 font-mono text-[10px] font-black border border-blue-800">
+                            PERCOBAAN 1 (UTAMA)
                           </span>
                         )}
                         <RetroBadge variant={isPending ? 'yellow' : 'green'} size="sm">
-                          {isPending ? 'MENUNGGU' : 'TERVERIFIKASI'}
+                          {isPending ? 'MENUNGGU' : 'DISAHKAN'}
                         </RetroBadge>
                       </div>
                     </div>
-                    <div className="text-xs font-mono text-zinc-600 mt-1">
-                      Skor Rekomendasi: <strong>{sub.autoScore} / 100</strong>
+
+                    <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-200">
+                      <div className="text-xs font-mono">
+                        Skor: <strong className={isPassed ? 'text-emerald-700' : 'text-red-600'}>{sub.finalScore ?? sub.autoScore} / 100</strong>
+                      </div>
+                      <div className="text-[10px] font-mono font-bold">
+                        {isPassed ? (
+                          <span className="text-emerald-800 bg-emerald-100 px-1.5 py-0.5 border border-emerald-400">
+                            ✓ TUNTAS
+                          </span>
+                        ) : isRemedial ? (
+                          <span className="text-purple-900 bg-purple-100 px-1.5 py-0.5 border border-purple-400">
+                            SELESAI (FINAL)
+                          </span>
+                        ) : (
+                          <span className="text-amber-800 bg-amber-100 px-1.5 py-0.5 border border-amber-400">
+                            REMEDIAL TERSEDIA
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center justify-between">
-                      <span>Sesi: {isRemedial ? 'Percobaan 2 (Remedial)' : 'Percobaan 1 (Reguler)'}</span>
-                      <span>{new Date(sub.submittedAt).toLocaleTimeString('id-ID')}</span>
+
+                    {/* Catatan pintar jika percobaan 1 sudah tuntas */}
+                    {!isRemedial && isPassed && (
+                      <div className="mt-1.5 text-[9px] font-mono text-emerald-800 bg-emerald-50 px-2 py-1 border border-emerald-300 flex items-center gap-1">
+                        <span>🔒</span>
+                        <span>Percobaan 1 Tuntas: Percobaan 2 otomatis terkunci.</span>
+                      </div>
+                    )}
+
+                    <div className="text-[10px] font-mono text-zinc-500 mt-1 flex items-center justify-between">
+                      <span>Waktu: {new Date(sub.submittedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>{new Date(sub.submittedAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}</span>
                     </div>
                   </div>
                 );
@@ -198,9 +240,13 @@ export default function TeacherGradingPage() {
                     <div className="text-zinc-600">SESI / KESEMPATAN:</div>
                     <div className="font-bold text-xs">
                       {selectedSub.attemptNumber === 2 ? (
-                        <span className="text-purple-800 font-black">🔴 UJIAN REMEDIAL (PERCOBAAN 2/2)</span>
+                        <span className="text-purple-900 bg-purple-100 px-2 py-0.5 border border-purple-600 font-black">
+                          🔴 UJIAN REMEDIAL (PERCOBAAN 2/2)
+                        </span>
                       ) : (
-                        <span className="text-blue-900 font-black">🔵 PERCOBAAN 1 (REGULER)</span>
+                        <span className="text-blue-900 bg-blue-100 px-2 py-0.5 border border-blue-600 font-black">
+                          🔵 PERCOBAAN 1 (UTAMA)
+                        </span>
                       )}
                     </div>
                   </div>
@@ -219,6 +265,58 @@ export default function TeacherGradingPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* Status Percobaan 1 vs 2 Alert */}
+                {(() => {
+                  const siblingSubs = submissions.filter(
+                    (s) => s.studentId === selectedSub.studentId && s.chapterId === selectedSub.chapterId
+                  );
+                  const attempt1 = siblingSubs.find((s) => (s.attemptNumber || 1) === 1);
+                  const attempt2 = siblingSubs.find((s) => s.attemptNumber === 2);
+                  const passingGrade = 75;
+                  const isAttempt1Passed = attempt1 && ((attempt1.finalScore || attempt1.autoScore) >= passingGrade);
+
+                  if ((selectedSub.attemptNumber || 1) === 1 && isAttempt1Passed) {
+                    return (
+                      <div className="p-3 bg-[#eefaf3] border-2 border-emerald-600 text-xs font-mono text-emerald-950 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
+                          <div>
+                            <strong>SISWA TUNTAS PADA PERCOBAAN 1 (Skor: {attempt1?.finalScore || attempt1?.autoScore}/100).</strong>
+                            <p className="text-[11px] text-emerald-800 mt-0.5">
+                              Sesuai aturan sistem, Ujian Remedial (Percobaan 2) <strong>OTOMATIS TERKUNCI</strong> dan siswa langsung berhak mempelajari materi selanjutnya.
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-emerald-700 text-white font-bold text-[10px] shrink-0 border border-black">
+                          REMEDIAL TIDAK DIPERLUKAN
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (selectedSub.attemptNumber === 2 && attempt1) {
+                    return (
+                      <div className="p-3 bg-[#faf5ff] border-2 border-purple-600 text-xs font-mono text-purple-950 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5 text-purple-700 shrink-0" />
+                          <div>
+                            <strong>PENINJAUAN HASIL REMEDIAL (PERCOBAAN KE-2).</strong>
+                            <p className="text-[11px] text-purple-900 mt-0.5">
+                              Skor Percobaan 1 Sebelumnya: <strong>{attempt1.finalScore || attempt1.autoScore} / 100 (Belum Tuntas)</strong>.
+                              Ini adalah kesempatan terakhir siswa.
+                            </p>
+                          </div>
+                        </div>
+                        <span className="px-2 py-1 bg-purple-700 text-white font-bold text-[10px] shrink-0 border border-black">
+                          KESEMPATAN 2 DARI 2
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 {/* Mode B Analysis Cards */}
                 {selectedSub.modeBAnalysis && selectedSub.modeBAnalysis.length > 0 ? (

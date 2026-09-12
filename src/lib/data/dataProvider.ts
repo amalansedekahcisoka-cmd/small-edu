@@ -987,17 +987,37 @@ export class DataProvider {
     return newSub;
   }
 
-  static approveSubmission(
+  static async approveSubmissionAsync(
     submissionId: string,
     finalScore: number,
     feedback: string,
-    teacherName: string
-  ): Submission | null {
-    const subs = this.getSubmissions();
-    const index = subs.findIndex((s) => s.id === submissionId);
-    if (index === -1) return null;
+    teacherName: string,
+    fallbackSub?: Submission
+  ): Promise<Submission | null> {
+    let subs = this.getSubmissions();
+    let index = subs.findIndex((s) => s.id === submissionId);
 
-    const target = subs[index];
+    let target: Submission;
+    if (index === -1) {
+      if (fallbackSub) {
+        target = fallbackSub;
+        subs.unshift(target);
+        index = 0;
+      } else {
+        const firestoreSubs = await FirestoreService.getSubmissions();
+        const found = firestoreSubs.find((s) => s.id === submissionId);
+        if (found) {
+          target = found;
+          subs.unshift(target);
+          index = 0;
+        } else {
+          return null;
+        }
+      }
+    } else {
+      target = subs[index];
+    }
+
     const updated: Submission = {
       ...target,
       finalScore,
@@ -1010,9 +1030,11 @@ export class DataProvider {
     safeSetItem(STORAGE_KEYS.SUBMISSIONS, subs);
     postServerAction('UPDATE_SUBMISSION', { submissionId, updates: updated });
 
-    FirestoreService.saveSubmission(updated).catch(console.error);
+    if (isFirebaseConfigured) {
+      await FirestoreService.saveSubmission(updated).catch(console.error);
+    }
 
-    const chapters = this.getChapters(target.courseId);
+    const chapters = await this.getChaptersAsync(target.courseId);
     const chapter = chapters.find((c) => c.id === target.chapterId);
     const passingGrade = chapter?.passing_grade ?? 75;
     const isPassed = finalScore >= passingGrade;
@@ -1021,7 +1043,21 @@ export class DataProvider {
     const maxAttempts = 2;
     const remedialAllowed = !isPassed && currentAttempt < maxAttempts;
 
-    this.updateChapterProgress(target.studentId, target.courseId, target.chapterId, {
+    // Ambil progres siswa riil dari Firestore (bukan dari cache guru)
+    let studentProgress = await this.getUserProgressAsync(target.studentId, target.courseId);
+    if (!studentProgress) {
+      studentProgress = this.getUserProgress(target.studentId, target.courseId);
+    }
+
+    const existingCh = studentProgress.chapters?.[target.chapterId] || {
+      chapterId: target.chapterId,
+      order_index: chapter?.order_index || 1,
+      is_completed: false,
+      status: 'unlocked',
+    };
+
+    studentProgress.chapters[target.chapterId] = {
+      ...existingCh,
       is_completed: true, // Bab ditandai selesai dipelajari/dikerjakan
       score: finalScore,
       status: isPassed ? 'passed' : 'failed',
@@ -1029,47 +1065,83 @@ export class DataProvider {
       maxAttempts,
       remedialAllowed,
       teacherFeedback: feedback,
-    });
+      lastAttemptAt: new Date().toISOString(),
+    };
+
+    // Buka bab selanjutnya berapa pun nilainya
+    if (chapter) {
+      const nextIndex = chapter.order_index + 1;
+      const nextCh = chapters.find((c) => c.order_index === nextIndex);
+      if (nextCh) {
+        if (!studentProgress.chapters[nextCh.id]) {
+          studentProgress.chapters[nextCh.id] = {
+            chapterId: nextCh.id,
+            order_index: nextIndex,
+            is_completed: false,
+            status: 'unlocked',
+          };
+        } else if (studentProgress.chapters[nextCh.id].status === 'locked') {
+          studentProgress.chapters[nextCh.id].status = 'unlocked';
+        }
+      }
+      studentProgress.current_chapter_index = Math.max(studentProgress.current_chapter_index, nextIndex);
+    }
+
+    const key = `${STORAGE_KEYS.PROGRESS_PREFIX}${target.studentId}_${target.courseId}`;
+    safeSetItem(key, studentProgress);
+    if (isFirebaseConfigured) {
+      await FirestoreService.saveUserProgress(studentProgress).catch(console.error);
+    }
 
     this.logActivity(
       target.studentId,
       target.studentName,
       'student',
       'SUBMISSION_GRADED',
-      `Tugas/Kuis ${chapter?.title || ''} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (KKM: ${passingGrade} - ${isPassed ? 'Lulus' : currentAttempt < 2 ? 'Belum Lulus / Remedial Tersedia' : 'Belum Lulus / Kesempatan Habis'}).`,
+      `Tugas/Kuis ${chapter?.title || ''} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (Standar: ${passingGrade} - ${isPassed ? 'Tuntas' : currentAttempt < 2 ? 'Belum Tuntas / Remedial Tersedia' : 'Belum Tuntas / Kesempatan Habis'}).`,
       target.courseId,
       target.chapterId
     );
 
-    // KONEKSI SKOR XP: Jika siswa lulus dan bab ini belum pernah klaim XP, berikan XP
-    if (isPassed) {
-      const studentProgress = this.getUserProgress(target.studentId, target.courseId);
-      const chProgress = studentProgress.chapters?.[target.chapterId];
-      if (!chProgress?.xpClaimed) {
-        const chapters = this.getChapters(target.courseId);
-        const chapter = chapters.find((c) => c.id === target.chapterId);
-        const starSettings = this.getCourseStarSettings(target.courseId);
-
-        let basePoints = chapter?.activityRewardPoints;
-        if (!basePoints) {
-          basePoints = chapter?.type === 'quiz'
-            ? (starSettings.defaultQuizXp ?? 30)
-            : (starSettings.defaultAssignmentXp ?? 30);
-        }
-
-        this.addActivityPoints(
-          target.studentId,
-          basePoints,
-          'Penilaian Guru Tuntas',
-          `Hasil evaluasi ${chapter?.title || 'Tugas/Ujian'} oleh ${teacherName} dinyatakan lulus dengan nilai ${finalScore}`,
-          'ACADEMIC_EXCELLENCE',
-          target.courseId,
-          target.chapterId
-        );
+    // KONEKSI SKOR XP
+    if (isPassed && !studentProgress.chapters?.[target.chapterId]?.xpClaimed) {
+      const starSettings = this.getCourseStarSettings(target.courseId);
+      let basePoints = chapter?.activityRewardPoints;
+      if (!basePoints) {
+        basePoints = chapter?.type === 'quiz'
+          ? (starSettings.defaultQuizXp ?? 30)
+          : (starSettings.defaultAssignmentXp ?? 30);
+      }
+      this.addActivityPoints(
+        target.studentId,
+        basePoints,
+        'Penilaian Guru Tuntas',
+        `Hasil evaluasi ${chapter?.title || 'Tugas/Ujian'} oleh ${teacherName} dinyatakan tuntas dengan nilai ${finalScore}`,
+        'ACADEMIC_EXCELLENCE',
+        target.courseId,
+        target.chapterId
+      );
+      studentProgress.chapters[target.chapterId].xpClaimed = true;
+      safeSetItem(key, studentProgress);
+      if (isFirebaseConfigured) {
+        FirestoreService.saveUserProgress(studentProgress).catch(console.error);
       }
     }
 
     return updated;
+  }
+
+  static approveSubmission(
+    submissionId: string,
+    finalScore: number,
+    feedback: string,
+    teacherName: string
+  ): Submission | null {
+    this.approveSubmissionAsync(submissionId, finalScore, feedback, teacherName).catch(console.error);
+    const subs = this.getSubmissions();
+    const index = subs.findIndex((s) => s.id === submissionId);
+    if (index === -1) return null;
+    return subs[index];
   }
 
   // --- ACHIEVEMENTS & STARS ---
