@@ -301,10 +301,10 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             <h3 className="font-black text-lg">Peraturan & Ketentuan Pengerjaan</h3>
             <ul className="text-sm space-y-2 font-mono list-disc list-inside">
               <li>
-                <strong>Target Capaian Pembelajaran (KKM):</strong> {chapter.passing_grade || 75} Poin.
+                <strong>Target Ketuntasan Belajar:</strong> {chapter.passing_grade || 75} Poin.
               </li>
               <li>
-                <strong>Batas Kesempatan Pengerjaan:</strong> Maksimal 2 Kali (1x Ujian Reguler + 1x Ujian Remedial jika nilai belum mencapai KKM).
+                <strong>Batas Kesempatan Pengerjaan:</strong> Maksimal 2 Kali (1x Ujian Reguler + 1x Ujian Remedial jika belum mencapai target ketuntasan belajar).
               </li>
               <li>
                 <strong>Batas Waktu Pengerjaan:</strong> {chapter.durationMinutes || 20} Menit.
@@ -362,7 +362,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
     );
   }
 
-  // Tampilan 2: Lembar Hasil Ujian (Menunggu Koreksi, Lulus KKM, Remedial, atau Kesempatan Habis)
+  // Tampilan 2: Lembar Hasil Ujian (Menunggu Koreksi, Lulus Ketuntasan Belajar, Remedial, atau Kesempatan Habis)
   if (isSubmitted && submissionResult) {
     const isPending = submissionResult.status === 'pending';
     const passingScore = chapter.passing_grade ?? 75;
@@ -395,10 +395,10 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
               {isPending
                 ? '📝 JAWABAN BERHASIL DIKIRIM (MENUNGGU VERIFIKASI GURU)'
                 : isPassed
-                ? '🎉 CAPAIAN PEMBELAJARAN TUNTAS (LULUS)'
+                ? '🎉 KETUNTASAN BELAJAR TERCAPAI (LULUS)'
                 : canRemedial
-                ? '⚠️ NILAI BELUM MENCAPAI KKM (KESEMPATAN REMEDIAL TERSEDIA)'
-                : '❌ HASIL AKHIR: BELUM MENCAPAI KKM'}
+                ? '⚠️ BELUM MENCAPAI KETUNTASAN BELAJAR (KESEMPATAN REMEDIAL TERSEDIA)'
+                : '❌ HASIL AKHIR: BELUM MENCAPAI KETUNTASAN BELAJAR'}
             </h2>
 
             <div
@@ -411,7 +411,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
 
             <div className="flex items-center justify-center gap-2 flex-wrap font-mono text-xs">
               <span className="px-3 py-1 bg-white neo-border-sm font-bold text-black">
-                Target KKM: {passingScore} Poin
+                Target Ketuntasan Belajar: {passingScore} Poin
               </span>
 
               <span
@@ -432,7 +432,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
                       : 'bg-red-200 text-red-950'
                   }`}
                 >
-                  {isPassed ? 'LULUS KKM' : 'BELUM CAPAI KKM'}
+                  {isPassed ? 'TUNTAS BELAJAR' : 'BELUM TUNTAS'}
                 </span>
               )}
             </div>
@@ -443,7 +443,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
                 : isPassed
                 ? p5.encouragement
                 : canRemedial
-                ? `Nilai Anda (${finalScore}) belum mencapai batas KKM (${passingScore}). Materi Bab berikutnya telah terbuka untuk Anda pelajari. Namun Anda tetap memiliki 1 kali kesempatan ujian remedial jika ingin memperbaiki nilai rapor!`
+                ? `Nilai Anda (${finalScore}) belum mencapai target ketuntasan belajar (${passingScore} Poin). Materi Bab berikutnya telah terbuka untuk Anda pelajari. Namun Anda tetap memiliki 1 kali kesempatan ujian remedial jika ingin memperbaiki nilai rapor!`
                 : `Anda telah menggunakan seluruh kesempatan pengerjaan (2 dari 2 kali). Nilai ini telah terkunci di buku nilai rapor, dan materi Bab selanjutnya sudah dapat Anda pelajari.`}
             </p>
           </div>

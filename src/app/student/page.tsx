@@ -433,8 +433,8 @@ export default function StudentDashboard() {
                                                 icon={<AlertTriangle className="w-3 h-3" />}
                                               >
                                                 {(chProg?.attemptCount || 1) < 2
-                                                  ? `⚠️ REMEDIAL TERSEDIA (SKOR: ${score ?? 0} / KKM ${ch.passing_grade || 75})`
-                                                  : `❌ BELUM TUNTAS (SKOR: ${score ?? 0})`}
+                                                  ? `⚠️ REMEDIAL TERSEDIA (SKOR: ${score ?? 0} / TARGET: ${ch.passing_grade || 75})`
+                                                  : `❌ BELUM TUNTAS BELAJAR (SKOR: ${score ?? 0})`}
                                               </RetroBadge>
                                             )}
 

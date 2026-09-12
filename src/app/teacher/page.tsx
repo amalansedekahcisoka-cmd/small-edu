@@ -1543,14 +1543,14 @@ export default function TeacherDashboard() {
                       )}
                     </div>
 
-                    {/* Target Capaian Pembelajaran / KKM (Ditetapkan Fleksibel oleh Guru Mapel) */}
+                    {/* Target Ketuntasan Belajar (Ditetapkan Fleksibel oleh Guru Mapel) */}
                     <div className="p-3 bg-[#fff9db] neo-border-sm space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
-                          <span>🎯 Target Capaian Pembelajaran (KKM):</span>
+                          <span>🎯 Target Ketuntasan Belajar:</span>
                         </label>
                         <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-white neo-border-sm text-amber-950">
-                          KKM: {passingGrade} Poin
+                          Standar: {passingGrade} Poin
                         </span>
                       </div>
 
@@ -1564,7 +1564,7 @@ export default function TeacherDashboard() {
                           className="w-32 p-2 neo-border-sm bg-white text-xs font-mono font-black focus:bg-white focus:outline-none"
                         />
                         <span className="text-xs font-mono text-zinc-600">
-                          Poin Standar Kelulusan (0 - 100)
+                          Poin Standar Ketuntasan (0 - 100)
                         </span>
                       </div>
 
