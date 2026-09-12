@@ -148,8 +148,42 @@ export const FirestoreService = {
     try {
       const ref = doc(db, 'classes', classId);
       await deleteDoc(ref);
+      await this.saveDeletedClassId(classId);
     } catch (e) {
       console.error('Error deleting class from Firestore', e);
+    }
+  },
+
+  async getDeletedClassIds(): Promise<string[]> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_classes');
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data();
+        return Array.isArray(data?.ids) ? data.ids : [];
+      }
+      return [];
+    } catch (e) {
+      console.warn('Fallback: could not fetch deleted class IDs from Firestore', e);
+      return [];
+    }
+  },
+
+  async saveDeletedClassId(classId: string): Promise<void> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_classes');
+      const snap = await getDoc(ref);
+      let currentIds: string[] = [];
+      if (snap.exists()) {
+        const data = snap.data();
+        currentIds = Array.isArray(data?.ids) ? [...data.ids] : [];
+      }
+      if (!currentIds.includes(classId)) {
+        currentIds.push(classId);
+        await setDoc(ref, { ids: currentIds, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving deleted class ID to Firestore', e);
     }
   },
 
@@ -177,8 +211,42 @@ export const FirestoreService = {
     try {
       const ref = doc(db, 'courses', courseId);
       await deleteDoc(ref);
+      await this.saveDeletedCourseId(courseId);
     } catch (e) {
       console.error('Error deleting course from Firestore', e);
+    }
+  },
+
+  async getDeletedCourseIds(): Promise<string[]> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_courses');
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const data = snap.data();
+        return Array.isArray(data?.ids) ? data.ids : [];
+      }
+      return [];
+    } catch (e) {
+      console.warn('Fallback: could not fetch deleted course IDs from Firestore', e);
+      return [];
+    }
+  },
+
+  async saveDeletedCourseId(courseId: string): Promise<void> {
+    try {
+      const ref = doc(db, 'metadata', 'deleted_courses');
+      const snap = await getDoc(ref);
+      let currentIds: string[] = [];
+      if (snap.exists()) {
+        const data = snap.data();
+        currentIds = Array.isArray(data?.ids) ? [...data.ids] : [];
+      }
+      if (!currentIds.includes(courseId)) {
+        currentIds.push(courseId);
+        await setDoc(ref, { ids: currentIds, updatedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving deleted course ID to Firestore', e);
     }
   },
 

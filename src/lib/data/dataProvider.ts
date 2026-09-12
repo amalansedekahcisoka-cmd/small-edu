@@ -46,6 +46,7 @@ const STORAGE_KEYS = {
   USERS: 'smalledu_users',
   DELETED_USERS: 'smalledu_deleted_user_ids',
   COURSES: 'smalledu_courses',
+  DELETED_COURSES: 'smalledu_deleted_course_ids',
   CHAPTERS: 'smalledu_chapters',
   PROGRESS_PREFIX: 'smalledu_progress_',
   SUBMISSIONS: 'smalledu_submissions',
@@ -72,9 +73,11 @@ function safeSetItem<T>(key: string, value: T): void {
   }
 }
 
-// Helper untuk kirim update ke server API agar semua browser / tab / incognito sinkron
+// Helper untuk kirim update ke server API (Hanya digunakan jika Firebase TIDAK aktif)
 async function postServerAction(action: string, payload: any): Promise<void> {
   if (typeof window === 'undefined') return;
+  // Jika Firebase aktif, jangan panggil server API lokal karena Firestore adalah database utama
+  if (isFirebaseConfigured) return;
   try {
     await fetch('/api/data', {
       method: 'POST',
@@ -86,9 +89,11 @@ async function postServerAction(action: string, payload: any): Promise<void> {
   }
 }
 
-// Helper untuk fetch snapshot database terbaru dari server
+// Helper untuk fetch snapshot database dari server (Hanya digunakan jika Firebase TIDAK aktif)
 async function fetchServerData(): Promise<any> {
   if (typeof window === 'undefined') return null;
+  // Jika Firebase aktif, jangan pernah timpa dengan data lokal db.json / mock
+  if (isFirebaseConfigured) return null;
   try {
     const res = await fetch('/api/data', { cache: 'no-store' });
     if (res.ok) {
@@ -120,11 +125,9 @@ async function fetchServerData(): Promise<any> {
 
           const localLogs = safeGetItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITY_LOGS, []);
           const logMap = new Map<string, ActivityLog>();
-          // Hanya masukkan log dari server yang bukan milik deleted user
           data.activityLogs.forEach((l: ActivityLog) => {
             if (l && l.id && !serverDeletedIds.has(l.userId)) logMap.set(l.id, l);
           });
-          // Merge log lokal, skip log dari deleted user
           localLogs.forEach((l: ActivityLog) => {
             if (l && l.id && !serverDeletedIds.has(l.userId) && !logMap.has(l.id)) {
               logMap.set(l.id, l);
@@ -138,6 +141,7 @@ async function fetchServerData(): Promise<any> {
         }
         if (data.deletedUserIds && Array.isArray(data.deletedUserIds)) safeSetItem(STORAGE_KEYS.DELETED_USERS, data.deletedUserIds);
         if (data.deletedClassIds && Array.isArray(data.deletedClassIds)) safeSetItem(STORAGE_KEYS.DELETED_CLASSES, data.deletedClassIds);
+        if (data.deletedCourseIds && Array.isArray(data.deletedCourseIds)) safeSetItem(STORAGE_KEYS.DELETED_COURSES, data.deletedCourseIds);
         if (data.progress && typeof data.progress === 'object') {
           Object.entries(data.progress).forEach(([progKey, progVal]) => {
             safeSetItem(`${STORAGE_KEYS.PROGRESS_PREFIX}${progKey}`, progVal);
@@ -152,19 +156,65 @@ async function fetchServerData(): Promise<any> {
   return null;
 }
 
-// Inisialisasi background sync saat browser jalan
+// Inisialisasi pembersihan cache mock & background sync saat browser dibuka
 if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    fetchServerData().catch(() => {});
-  }, 100);
+  try {
+    // 1. Bersihkan kursus mock lama dari localStorage
+    const legacyMockCourseIds = ['course-web-dev', 'crs-1789119026980'];
+    const currentDeletedCourses = safeGetItem<string[]>(STORAGE_KEYS.DELETED_COURSES, []);
+    let updatedDeletedCourses = [...currentDeletedCourses];
+    legacyMockCourseIds.forEach((id) => {
+      if (!updatedDeletedCourses.includes(id)) updatedDeletedCourses.push(id);
+    });
+    safeSetItem(STORAGE_KEYS.DELETED_COURSES, updatedDeletedCourses);
+
+    const storedCourses = safeGetItem<Course[]>(STORAGE_KEYS.COURSES, []);
+    const cleanCourses = storedCourses.filter(
+      (c) =>
+        c &&
+        !updatedDeletedCourses.includes(c.id) &&
+        c.teacherId !== 'user-teacher-rudiansyah' &&
+        c.id !== 'course-web-dev' &&
+        c.id !== 'crs-1789119026980'
+    );
+    safeSetItem(STORAGE_KEYS.COURSES, cleanCourses);
+
+    // 2. Bersihkan user mock lama dari localStorage
+    const legacyMockUserIds = ['user-teacher-rudiansyah', 'user-student-ica'];
+    const currentDeletedUsers = safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []);
+    let updatedDeletedUsers = [...currentDeletedUsers];
+    legacyMockUserIds.forEach((id) => {
+      if (!updatedDeletedUsers.includes(id)) updatedDeletedUsers.push(id);
+    });
+    safeSetItem(STORAGE_KEYS.DELETED_USERS, updatedDeletedUsers);
+
+    const storedUsers = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+    const cleanUsers = storedUsers.filter((u) => u && !updatedDeletedUsers.includes(u.id));
+    safeSetItem(STORAGE_KEYS.USERS, cleanUsers);
+
+    // 3. Bersihkan bab mock lama yang berhubungan dengan kursus mock
+    const storedChapters = safeGetItem<Chapter[]>(STORAGE_KEYS.CHAPTERS, []);
+    const cleanChapters = storedChapters.filter(
+      (ch) => ch && !legacyMockCourseIds.includes(ch.courseId)
+    );
+    safeSetItem(STORAGE_KEYS.CHAPTERS, cleanChapters);
+  } catch (e) {
+    // ignore
+  }
+
+  // Jika Firebase tidak aktif, fallback sync ke server data
+  if (!isFirebaseConfigured) {
+    setTimeout(() => {
+      fetchServerData().catch(() => {});
+    }, 100);
+  }
 }
 
 export class DataProvider {
   // Trigger sinkronisasi server & cloud firestore
   static async syncWithServer(): Promise<void> {
     try {
-      await Promise.allSettled([
-        fetchServerData(),
+      const syncTasks: Promise<any>[] = [
         this.getUsersAsync(),
         this.getClassesAsync(),
         this.getCoursesAsync(),
@@ -172,7 +222,11 @@ export class DataProvider {
         this.getActivityLogsAsync(),
         this.getSubmissionsAsync(),
         this.syncAllProgressAsync(),
-      ]);
+      ];
+      if (!isFirebaseConfigured) {
+        syncTasks.unshift(fetchServerData());
+      }
+      await Promise.allSettled(syncTasks);
     } catch (e) {
       console.warn('syncWithServer error:', e);
     }
@@ -199,30 +253,30 @@ export class DataProvider {
   // --- DATABASE KELAS ---
   static getClasses(): ClassRoom[] {
     const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_CLASSES, []));
-    const stored = safeGetItem<ClassRoom[]>(STORAGE_KEYS.CLASSES, MOCK_CLASSES);
-    const all = stored.length > 0 ? stored : MOCK_CLASSES;
-    return all.filter((c) => !deletedIds.has(c.id));
+    const stored = safeGetItem<ClassRoom[]>(STORAGE_KEYS.CLASSES, []);
+    return stored.filter((c) => c && !deletedIds.has(c.id));
   }
 
   static async getClassesAsync(): Promise<ClassRoom[]> {
-    const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_CLASSES, []));
+    let allDeletedList = safeGetItem<string[]>(STORAGE_KEYS.DELETED_CLASSES, []);
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreDeleted = await FirestoreService.getDeletedClassIds?.();
+        if (Array.isArray(firestoreDeleted) && firestoreDeleted.length > 0) {
+          allDeletedList = Array.from(new Set([...allDeletedList, ...firestoreDeleted]));
+          safeSetItem(STORAGE_KEYS.DELETED_CLASSES, allDeletedList);
+        }
+      } catch (e) {}
+    }
+    const deletedIds = new Set(allDeletedList);
+
     if (isFirebaseConfigured) {
       try {
         const firestoreClasses = await FirestoreService.getClasses();
-        if (Array.isArray(firestoreClasses) && firestoreClasses.length > 0) {
-          const valid = firestoreClasses.filter((c) => !deletedIds.has(c.id));
-          if (valid.length > 0) {
-            const map = new Map<string, ClassRoom>();
-            MOCK_CLASSES.forEach((c) => {
-              if (!deletedIds.has(c.id)) map.set(c.id, c);
-            });
-            valid.forEach((c) => {
-              if (!deletedIds.has(c.id)) map.set(c.id, { ...map.get(c.id), ...c });
-            });
-            const merged = Array.from(map.values());
-            safeSetItem(STORAGE_KEYS.CLASSES, merged);
-            return merged;
-          }
+        if (Array.isArray(firestoreClasses)) {
+          const valid = firestoreClasses.filter((c) => c && !deletedIds.has(c.id));
+          safeSetItem(STORAGE_KEYS.CLASSES, valid);
+          return valid;
         }
       } catch (e) {
         console.warn('Firestore getClasses error:', e);
@@ -232,7 +286,7 @@ export class DataProvider {
     // Ambil data terbaru dari server data/db.json jika Firebase belum disetup
     const serverData = await fetchServerData();
     if (serverData?.classes && Array.isArray(serverData.classes) && serverData.classes.length > 0) {
-      const valid = (serverData.classes as ClassRoom[]).filter((c) => !deletedIds.has(c.id));
+      const valid = (serverData.classes as ClassRoom[]).filter((c) => c && !deletedIds.has(c.id));
       safeSetItem(STORAGE_KEYS.CLASSES, valid);
       return valid;
     }
@@ -329,7 +383,7 @@ export class DataProvider {
     const stored = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
 
     const map = new Map<string, User>();
-    // Masukkan MOCK_USERS jika belum dihapus
+    // Hanya masukkan superadmin bawaan jika belum ada dan belum dihapus
     MOCK_USERS.forEach((u) => {
       if (!deletedIds.has(u.id)) {
         map.set(u.id, u);
@@ -338,7 +392,7 @@ export class DataProvider {
 
     if (Array.isArray(stored)) {
       stored.forEach((u) => {
-        if (!deletedIds.has(u.id)) {
+        if (u && !deletedIds.has(u.id)) {
           if (map.has(u.id)) {
             map.set(u.id, { ...map.get(u.id)!, ...u });
           } else {
@@ -348,11 +402,7 @@ export class DataProvider {
       });
     }
 
-    const merged = Array.from(map.values()).filter((u) => !deletedIds.has(u.id));
-    if (!stored || stored.length === 0) {
-      safeSetItem(STORAGE_KEYS.USERS, merged);
-    }
-    return merged;
+    return Array.from(map.values()).filter((u) => !deletedIds.has(u.id));
   }
 
   static async getUsersAsync(): Promise<User[]> {
@@ -375,54 +425,52 @@ export class DataProvider {
     if (isFirebaseConfigured) {
       try {
         const firestoreUsers = await FirestoreService.getUsers();
-        if (Array.isArray(firestoreUsers) && firestoreUsers.length > 0) {
-          const valid = firestoreUsers.filter((u) => !deletedIds.has(u.id));
-          if (valid.length > 0) {
-            const userMap = new Map<string, User>();
-            // Masukkan akun superadmin & guru bawaan jika belum ada di firestore
-            MOCK_USERS.forEach((u) => {
-              if (!deletedIds.has(u.id)) userMap.set(u.id, u);
-            });
+        if (Array.isArray(firestoreUsers)) {
+          const valid = firestoreUsers.filter((u) => u && !deletedIds.has(u.id));
+          const userMap = new Map<string, User>();
+          // Masukkan akun superadmin bawaan
+          MOCK_USERS.forEach((u) => {
+            if (!deletedIds.has(u.id)) userMap.set(u.id, u);
+          });
 
-            // Baca XP & bintang lokal yang mungkin sudah diraih siswa
-            const localUsers = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
-            const localPointsMap = new Map<string, { points: number; stars: number }>();
-            localUsers.forEach((lu) => {
-              if (lu && lu.id && ((lu.activityPoints || 0) > 0 || (lu.starsCount || 0) > 0)) {
-                localPointsMap.set(lu.id, { points: lu.activityPoints || 0, stars: lu.starsCount || 0 });
-              }
-            });
+          // Baca XP & bintang lokal yang mungkin sudah diraih siswa
+          const localUsers = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+          const localPointsMap = new Map<string, { points: number; stars: number }>();
+          localUsers.forEach((lu) => {
+            if (lu && lu.id && ((lu.activityPoints || 0) > 0 || (lu.starsCount || 0) > 0)) {
+              localPointsMap.set(lu.id, { points: lu.activityPoints || 0, stars: lu.starsCount || 0 });
+            }
+          });
 
-            // Overwrite dan tambahkan dari Cloud Firestore (source of truth terpercaya)
-            valid.forEach((u) => {
-              if (!deletedIds.has(u.id)) {
-                const localPts = localPointsMap.get(u.id);
-                const finalPoints = Math.max(u.activityPoints || 0, localPts?.points || 0);
-                const finalStars = Math.max(u.starsCount || 0, localPts?.stars || 0);
-                const mergedUser: User = {
-                  ...userMap.get(u.id),
-                  ...u,
+          // Overwrite dan tambahkan dari Cloud Firestore (source of truth terpercaya)
+          valid.forEach((u) => {
+            if (u && !deletedIds.has(u.id)) {
+              const localPts = localPointsMap.get(u.id);
+              const finalPoints = Math.max(u.activityPoints || 0, localPts?.points || 0);
+              const finalStars = Math.max(u.starsCount || 0, localPts?.stars || 0);
+              const mergedUser: User = {
+                ...userMap.get(u.id),
+                ...u,
+                activityPoints: finalPoints,
+                starsCount: finalStars,
+              };
+              userMap.set(u.id, mergedUser);
+
+              // Jika data lokal memiliki poin/bintang lebih tinggi, sinkronkan balik ke Firestore
+              if (
+                (localPts?.points || 0) > (u.activityPoints || 0) ||
+                (localPts?.stars || 0) > (u.starsCount || 0)
+              ) {
+                FirestoreService.updateUser(u.id, {
                   activityPoints: finalPoints,
                   starsCount: finalStars,
-                };
-                userMap.set(u.id, mergedUser);
-
-                // Jika data lokal memiliki poin/bintang lebih tinggi, sinkronkan balik ke Firestore
-                if (
-                  (localPts?.points || 0) > (u.activityPoints || 0) ||
-                  (localPts?.stars || 0) > (u.starsCount || 0)
-                ) {
-                  FirestoreService.updateUser(u.id, {
-                    activityPoints: finalPoints,
-                    starsCount: finalStars,
-                  }).catch(console.error);
-                }
+                }).catch(console.error);
               }
-            });
-            const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
-            safeSetItem(STORAGE_KEYS.USERS, merged);
-            return merged;
-          }
+            }
+          });
+          const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
+          safeSetItem(STORAGE_KEYS.USERS, merged);
+          return merged;
         }
       } catch (err) {
         console.warn('Firestore getUsers error in DataProvider:', err);
@@ -445,7 +493,6 @@ export class DataProvider {
     try {
       const localUsers = this.getUsers();
       for (const u of localUsers) {
-        // Sync akun buatan admin (misal siswa/guru)
         if (u.id.startsWith('user-') && u.id !== 'user-superadmin') {
           await FirestoreService.saveUser(u).catch(console.error);
         }
@@ -534,24 +581,54 @@ export class DataProvider {
 
   // --- COURSES & CHAPTERS ---
   static getCourses(): Course[] {
-    return safeGetItem(STORAGE_KEYS.COURSES, MOCK_COURSES);
+    const deletedIds = new Set([
+      ...safeGetItem<string[]>(STORAGE_KEYS.DELETED_COURSES, []),
+      'course-web-dev',
+      'crs-1789119026980',
+    ]);
+    const stored = safeGetItem<Course[]>(STORAGE_KEYS.COURSES, []);
+    return stored.filter(
+      (c) =>
+        c &&
+        c.id &&
+        !deletedIds.has(c.id) &&
+        c.teacherId !== 'user-teacher-rudiansyah' &&
+        c.id !== 'course-web-dev' &&
+        c.id !== 'crs-1789119026980'
+    );
   }
 
   static async getCoursesAsync(): Promise<Course[]> {
+    let allDeletedList = safeGetItem<string[]>(STORAGE_KEYS.DELETED_COURSES, []);
+    if (!allDeletedList.includes('course-web-dev')) allDeletedList.push('course-web-dev');
+    if (!allDeletedList.includes('crs-1789119026980')) allDeletedList.push('crs-1789119026980');
+
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreDeleted = await FirestoreService.getDeletedCourseIds?.();
+        if (Array.isArray(firestoreDeleted) && firestoreDeleted.length > 0) {
+          allDeletedList = Array.from(new Set([...allDeletedList, ...firestoreDeleted]));
+          safeSetItem(STORAGE_KEYS.DELETED_COURSES, allDeletedList);
+        }
+      } catch (e) {}
+    }
+    const deletedIds = new Set(allDeletedList);
+
     if (isFirebaseConfigured) {
       try {
         const firestoreCourses = await FirestoreService.getCourses();
-        if (Array.isArray(firestoreCourses) && firestoreCourses.length > 0) {
-          const map = new Map<string, Course>();
-          MOCK_COURSES.forEach((c) => map.set(c.id, c));
-          const localCourses = safeGetItem<Course[]>(STORAGE_KEYS.COURSES, []);
-          localCourses.forEach((c) => map.set(c.id, c));
-          firestoreCourses.forEach((c) => {
-            if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
-          });
-          const merged = Array.from(map.values());
-          safeSetItem(STORAGE_KEYS.COURSES, merged);
-          return merged;
+        if (Array.isArray(firestoreCourses)) {
+          const valid = firestoreCourses.filter(
+            (c) =>
+              c &&
+              c.id &&
+              !deletedIds.has(c.id) &&
+              c.teacherId !== 'user-teacher-rudiansyah' &&
+              c.id !== 'course-web-dev' &&
+              c.id !== 'crs-1789119026980'
+          );
+          safeSetItem(STORAGE_KEYS.COURSES, valid);
+          return valid;
         }
       } catch (e) {
         console.warn('Firestore getCourses error in DataProvider:', e);
@@ -560,9 +637,17 @@ export class DataProvider {
 
     const serverData = await fetchServerData();
     if (serverData?.courses && Array.isArray(serverData.courses) && serverData.courses.length > 0) {
-      const merged = serverData.courses as Course[];
-      safeSetItem(STORAGE_KEYS.COURSES, merged);
-      return merged;
+      const valid = (serverData.courses as Course[]).filter(
+        (c) =>
+          c &&
+          c.id &&
+          !deletedIds.has(c.id) &&
+          c.teacherId !== 'user-teacher-rudiansyah' &&
+          c.id !== 'course-web-dev' &&
+          c.id !== 'crs-1789119026980'
+      );
+      safeSetItem(STORAGE_KEYS.COURSES, valid);
+      return valid;
     }
     return this.getCourses();
   }
@@ -618,6 +703,12 @@ export class DataProvider {
   }
 
   static deleteCourse(courseId: string): void {
+    const deletedIds = safeGetItem<string[]>(STORAGE_KEYS.DELETED_COURSES, []);
+    if (!deletedIds.includes(courseId)) {
+      deletedIds.push(courseId);
+      safeSetItem(STORAGE_KEYS.DELETED_COURSES, deletedIds);
+    }
+
     const courses = this.getCourses().filter((c) => c.id !== courseId);
     safeSetItem(STORAGE_KEYS.COURSES, courses);
 
@@ -647,7 +738,7 @@ export class DataProvider {
       try {
         if (courseId) {
           const chs = await FirestoreService.getChapters(courseId);
-          if (Array.isArray(chs) && chs.length > 0) {
+          if (Array.isArray(chs)) {
             const allLocal = this.getChapters();
             const otherChapters = allLocal.filter((c) => c.courseId !== courseId);
             const map = new Map<string, Chapter>();
@@ -659,7 +750,7 @@ export class DataProvider {
           }
         } else {
           const allChs = await FirestoreService.getAllChapters();
-          if (Array.isArray(allChs) && allChs.length > 0) {
+          if (Array.isArray(allChs)) {
             const map = new Map<string, Chapter>();
             const allLocal = this.getChapters();
             allLocal.forEach((c) => map.set(c.id, c));

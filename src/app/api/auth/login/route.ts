@@ -25,14 +25,21 @@ function readLocalUsers(): any[] {
 
 async function getAllUsers(): Promise<any[]> {
   const userMap = new Map<string, any>();
+  let deletedIds = new Set<string>();
 
   // 1. Prioritaskan data Firestore jika sudah terkonfigurasi
   if (isFirebaseConfigured) {
     try {
-      const firestoreUsers = await FirestoreService.getUsers();
+      const [firestoreUsers, firestoreDeleted] = await Promise.all([
+        FirestoreService.getUsers(),
+        FirestoreService.getDeletedUserIds(),
+      ]);
+      if (Array.isArray(firestoreDeleted)) {
+        deletedIds = new Set(firestoreDeleted);
+      }
       if (Array.isArray(firestoreUsers) && firestoreUsers.length > 0) {
         firestoreUsers.forEach((u) => {
-          if (u && u.id) userMap.set(u.id, u);
+          if (u && u.id && !deletedIds.has(u.id)) userMap.set(u.id, u);
         });
       }
     } catch (err) {
@@ -40,15 +47,18 @@ async function getAllUsers(): Promise<any[]> {
     }
   }
 
-  // 2. Fallback / tambahkan dari db.json & MOCK_USERS
-  const localUsers = readLocalUsers();
-  localUsers.forEach((u) => {
-    if (u && u.id && !userMap.has(u.id)) {
-      userMap.set(u.id, u);
-    }
-  });
+  // 2. Fallback / tambahkan dari db.json & MOCK_USERS hanya jika userMap kosong
+  if (userMap.size === 0) {
+    const localUsers = readLocalUsers();
+    localUsers.forEach((u) => {
+      if (u && u.id && !deletedIds.has(u.id) && !userMap.has(u.id)) {
+        userMap.set(u.id, u);
+      }
+    });
+  }
+
   MOCK_USERS.forEach((u) => {
-    if (u && u.id && !userMap.has(u.id)) {
+    if (u && u.id && !deletedIds.has(u.id) && !userMap.has(u.id)) {
       userMap.set(u.id, u);
     }
   });

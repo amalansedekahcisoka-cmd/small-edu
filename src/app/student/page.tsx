@@ -43,6 +43,7 @@ export default function StudentDashboard() {
 
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedBabReport, setSelectedBabReport] = useState<BabLearningReport | null>(null);
+  const selectedCourseIdRef = React.useRef<string | null>(null);
 
   const loadDashboard = async () => {
     let currentUser = DataProvider.getCurrentUser();
@@ -94,9 +95,15 @@ export default function StudentDashboard() {
 
     setAvailableCourses(myCourses);
 
-    // Gunakan course yang sudah dipilih, atau pilih yang pertama
-    const currentCourseId = course?.id;
-    const primaryCourse = myCourses.find((c) => c.id === currentCourseId) || myCourses[0] || null;
+    // Gunakan course yang sedang aktif dari ref, atau pilih yang pertama
+    const currentCourseId = selectedCourseIdRef.current || course?.id;
+    let primaryCourse = myCourses.find((c) => c.id === currentCourseId) || null;
+    if (!primaryCourse && myCourses.length > 0) {
+      primaryCourse = myCourses[0];
+    }
+    if (primaryCourse) {
+      selectedCourseIdRef.current = primaryCourse.id;
+    }
     setCourse(primaryCourse);
 
     if (primaryCourse) {
@@ -119,6 +126,7 @@ export default function StudentDashboard() {
 
   const handleSelectCourse = async (selectedCourse: Course) => {
     if (!user) return;
+    selectedCourseIdRef.current = selectedCourse.id;
     setCourse(selectedCourse);
     const chs = await DataProvider.getChaptersAsync(selectedCourse.id);
     setChapters(chs);
