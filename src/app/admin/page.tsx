@@ -79,15 +79,25 @@ function AdminContent() {
     setTimeout(() => setNotification(null), 5000);
   };
 
-  const loadData = () => {
-    const allUsers = DataProvider.getUsers();
-    setUsers(allUsers);
+  const loadData = async () => {
+    const initialUsers = DataProvider.getUsers();
+    setUsers(initialUsers);
 
-    const allClasses = DataProvider.getClasses();
-    setClasses(allClasses);
-    if (allClasses.length > 0 && !studentClass) {
-      setStudentClass(allClasses[0].name);
+    const initialClasses = DataProvider.getClasses();
+    setClasses(initialClasses);
+    if (initialClasses.length > 0 && !studentClass) {
+      setStudentClass(initialClasses[0].name);
     }
+
+    // Sinkronkan akun/kelas lokal ke Cloud Firestore (misal akun yang dibuat sebelum env aktif)
+    await DataProvider.syncLocalToFirestore();
+
+    // Tarik snapshot terbaru dari Cloud Firestore
+    const asyncUsers = await DataProvider.getUsersAsync();
+    setUsers(asyncUsers);
+
+    const asyncClasses = await DataProvider.getClassesAsync();
+    setClasses(asyncClasses);
   };
 
   useEffect(() => {

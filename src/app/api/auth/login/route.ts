@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { FirestoreService } from '@/lib/firebase/firestoreService';
+import { isFirebaseConfigured } from '@/lib/firebase/config';
+import { MOCK_USERS } from '@/lib/data/mockData';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
-function readUsers() {
+function readLocalUsers(): any[] {
   try {
     if (fs.existsSync(DB_FILE)) {
       const raw = fs.readFileSync(DB_FILE, 'utf-8').replace(/^\uFEFF/, '');
@@ -17,7 +20,40 @@ function readUsers() {
   } catch (err) {
     console.error('Error reading users for auth:', err);
   }
-  return [];
+  return MOCK_USERS;
+}
+
+async function getAllUsers(): Promise<any[]> {
+  const userMap = new Map<string, any>();
+
+  // 1. Prioritaskan data Firestore jika sudah terkonfigurasi
+  if (isFirebaseConfigured) {
+    try {
+      const firestoreUsers = await FirestoreService.getUsers();
+      if (Array.isArray(firestoreUsers) && firestoreUsers.length > 0) {
+        firestoreUsers.forEach((u) => {
+          if (u && u.id) userMap.set(u.id, u);
+        });
+      }
+    } catch (err) {
+      console.warn('Firestore fetch in login route failed, using local fallback:', err);
+    }
+  }
+
+  // 2. Fallback / tambahkan dari db.json & MOCK_USERS
+  const localUsers = readLocalUsers();
+  localUsers.forEach((u) => {
+    if (u && u.id && !userMap.has(u.id)) {
+      userMap.set(u.id, u);
+    }
+  });
+  MOCK_USERS.forEach((u) => {
+    if (u && u.id && !userMap.has(u.id)) {
+      userMap.set(u.id, u);
+    }
+  });
+
+  return Array.from(userMap.values());
 }
 
 export async function POST(request: Request) {
@@ -35,7 +71,7 @@ export async function POST(request: Request) {
     const cleanInput = identifier.toLowerCase().trim();
     const cleanPassword = password.trim();
 
-    const users = readUsers();
+    const users = await getAllUsers();
     const matchedUser = users.find((u: any) => {
       const uEmail = (u.email || '').toLowerCase().trim();
       const uIdNumber = (u.nisn_nip || '').toLowerCase().trim();

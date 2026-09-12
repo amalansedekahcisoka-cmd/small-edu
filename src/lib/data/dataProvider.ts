@@ -26,6 +26,7 @@ import {
   MOCK_SUBMISSIONS,
 } from './mockData';
 import { FirestoreService } from '../firebase/firestoreService';
+import { isFirebaseConfigured } from '../firebase/config';
 
 export const DEFAULT_STAR_SETTINGS: CourseStarSettings = {
   xpPerStar: 100,
@@ -93,7 +94,18 @@ async function fetchServerData(): Promise<any> {
     if (res.ok) {
       const data = await res.json();
       if (data) {
-        if (data.users && Array.isArray(data.users)) safeSetItem(STORAGE_KEYS.USERS, data.users);
+        if (data.users && Array.isArray(data.users)) {
+          const currentStored = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+          const passMap = new Map<string, string>();
+          currentStored.forEach((u) => {
+            if (u.password) passMap.set(u.id, u.password);
+          });
+          const mergedUsers = data.users.map((u: any) => ({
+            ...u,
+            password: passMap.get(u.id) || u.password || u.nisn_nip || '',
+          }));
+          safeSetItem(STORAGE_KEYS.USERS, mergedUsers);
+        }
         if (data.classes && Array.isArray(data.classes)) safeSetItem(STORAGE_KEYS.CLASSES, data.classes);
         if (data.courses && Array.isArray(data.courses)) safeSetItem(STORAGE_KEYS.COURSES, data.courses);
         if (data.chapters && Array.isArray(data.chapters)) safeSetItem(STORAGE_KEYS.CHAPTERS, data.chapters);
@@ -159,6 +171,33 @@ export class DataProvider {
     const stored = safeGetItem<ClassRoom[]>(STORAGE_KEYS.CLASSES, MOCK_CLASSES);
     const all = stored.length > 0 ? stored : MOCK_CLASSES;
     return all.filter((c) => !deletedIds.has(c.id));
+  }
+
+  static async getClassesAsync(): Promise<ClassRoom[]> {
+    const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_CLASSES, []));
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreClasses = await FirestoreService.getClasses();
+        if (Array.isArray(firestoreClasses) && firestoreClasses.length > 0) {
+          const valid = firestoreClasses.filter((c) => !deletedIds.has(c.id));
+          if (valid.length > 0) {
+            const map = new Map<string, ClassRoom>();
+            MOCK_CLASSES.forEach((c) => {
+              if (!deletedIds.has(c.id)) map.set(c.id, c);
+            });
+            valid.forEach((c) => {
+              if (!deletedIds.has(c.id)) map.set(c.id, { ...map.get(c.id), ...c });
+            });
+            const merged = Array.from(map.values());
+            safeSetItem(STORAGE_KEYS.CLASSES, merged);
+            return merged;
+          }
+        }
+      } catch (e) {
+        console.warn('Firestore getClasses error:', e);
+      }
+    }
+    return this.getClasses();
   }
 
   static addClass(newClass: Omit<ClassRoom, 'id' | 'createdAt'>): ClassRoom {
@@ -277,14 +316,65 @@ export class DataProvider {
   }
 
   static async getUsersAsync(): Promise<User[]> {
-    // 1. Ambil dari server API terlebih dahulu (agar multi-tab / incognito / device langsung sinkron)
+    const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []));
+
+    // 1. Prioritaskan Cloud Firestore jika terkonfigurasi (agar multi-device langsung sinkron)
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreUsers = await FirestoreService.getUsers();
+        if (Array.isArray(firestoreUsers) && firestoreUsers.length > 0) {
+          const valid = firestoreUsers.filter((u) => !deletedIds.has(u.id));
+          if (valid.length > 0) {
+            const userMap = new Map<string, User>();
+            MOCK_USERS.forEach((u) => {
+              if (!deletedIds.has(u.id)) userMap.set(u.id, u);
+            });
+            const stored = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+            stored.forEach((u) => {
+              if (!deletedIds.has(u.id)) userMap.set(u.id, { ...userMap.get(u.id), ...u });
+            });
+            valid.forEach((u) => {
+              if (!deletedIds.has(u.id)) userMap.set(u.id, { ...userMap.get(u.id), ...u });
+            });
+            const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
+            safeSetItem(STORAGE_KEYS.USERS, merged);
+            return merged;
+          }
+        }
+      } catch (err) {
+        console.warn('Firestore getUsers error in DataProvider:', err);
+      }
+    }
+
+    // 2. Ambil dari server API data
     const serverData = await fetchServerData();
     if (serverData?.users && Array.isArray(serverData.users) && serverData.users.length > 0) {
-      const deletedIds = new Set(safeGetItem<string[]>(STORAGE_KEYS.DELETED_USERS, []));
       return (serverData.users as User[]).filter((u) => !deletedIds.has(u.id));
     }
-    // 2. Fallback ke local
+
+    // 3. Fallback ke local
     return this.getUsers();
+  }
+
+  // Helper untuk sinkronisasi data lokal (misal akun yang dibuat sebelum env aktif) ke Firestore
+  static async syncLocalToFirestore(): Promise<void> {
+    if (!isFirebaseConfigured) return;
+    try {
+      const localUsers = this.getUsers();
+      for (const u of localUsers) {
+        // Sync akun buatan admin (misal siswa/guru)
+        if (u.id.startsWith('user-') && u.id !== 'user-superadmin') {
+          await FirestoreService.saveUser(u).catch(console.error);
+        }
+      }
+
+      const localClasses = this.getClasses();
+      for (const c of localClasses) {
+        await FirestoreService.saveClass(c).catch(console.error);
+      }
+    } catch (e) {
+      console.warn('Sync local to firestore failed:', e);
+    }
   }
 
   static getCurrentUser(): User {

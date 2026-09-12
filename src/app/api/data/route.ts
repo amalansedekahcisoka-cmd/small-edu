@@ -7,43 +7,59 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
 
 function ensureDataFile() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-  if (!fs.existsSync(DB_FILE)) {
-    const initialData = {
-      users: MOCK_USERS,
-      classes: MOCK_CLASSES,
-      courses: MOCK_COURSES,
-      chapters: MOCK_CHAPTERS,
-      submissions: MOCK_SUBMISSIONS,
-      achievements: MOCK_ACHIEVEMENTS,
-      activityLogs: MOCK_ACTIVITY_LOGS,
-      deletedUserIds: [],
-      deletedClassIds: [],
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(DB_FILE)) {
+      const initialData = {
+        users: MOCK_USERS,
+        classes: MOCK_CLASSES,
+        courses: MOCK_COURSES,
+        chapters: MOCK_CHAPTERS,
+        submissions: MOCK_SUBMISSIONS,
+        achievements: MOCK_ACHIEVEMENTS,
+        activityLogs: MOCK_ACTIVITY_LOGS,
+        deletedUserIds: [],
+        deletedClassIds: [],
+      };
+      fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    // Read-only filesystem di serverless environment (Netlify/Lambda)
   }
 }
 
 function readDb() {
   ensureDataFile();
   try {
-    const raw = fs.readFileSync(DB_FILE, 'utf-8').replace(/^\uFEFF/, ''); // strip BOM jika ada
-    return JSON.parse(raw);
+    if (fs.existsSync(DB_FILE)) {
+      const raw = fs.readFileSync(DB_FILE, 'utf-8').replace(/^\uFEFF/, ''); // strip BOM jika ada
+      return JSON.parse(raw);
+    }
   } catch (err) {
     console.error('Error reading db.json:', err);
-    return null;
   }
+  return {
+    users: MOCK_USERS,
+    classes: MOCK_CLASSES,
+    courses: MOCK_COURSES,
+    chapters: MOCK_CHAPTERS,
+    submissions: MOCK_SUBMISSIONS,
+    achievements: MOCK_ACHIEVEMENTS,
+    activityLogs: MOCK_ACTIVITY_LOGS,
+    deletedUserIds: [],
+    deletedClassIds: [],
+  };
 }
 
 function writeDb(data: any) {
-  ensureDataFile();
   try {
+    ensureDataFile();
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
     return true;
   } catch (err) {
-    console.error('Error writing db.json:', err);
+    console.warn('Cannot write db.json in serverless read-only environment, skipped:', err);
     return false;
   }
 }
