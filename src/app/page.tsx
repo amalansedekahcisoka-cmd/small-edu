@@ -140,6 +140,19 @@ function LoginForm() {
       // Simpan identitas pengguna aktif di dataProvider (cache sesi lokal)
       DataProvider.setCurrentUser(matchedUser);
 
+      if (matchedUser.role === 'student') {
+        DataProvider.logActivity(
+          matchedUser.id,
+          matchedUser.name,
+          'student',
+          'LOGIN',
+          'Siswa berhasil login dan memasuki sistem Small-Edu.',
+          undefined,
+          undefined,
+          matchedUser.gradeClass
+        );
+      }
+
       if (mustChangePassword) {
         router.push('/auth/change-password');
         return;

@@ -632,24 +632,22 @@ export default function TeacherDashboard() {
 
         {/* Action Shortcuts */}
         <div className="flex items-center gap-2 flex-wrap">
-          <Link href="/teacher/activity-log">
-            <RetroButton
-              variant="white"
-              size="md"
-              icon={<Activity className="w-4 h-4 text-[#008080]" />}
-            >
-              Log Aktivitas Siswa
-            </RetroButton>
-          </Link>
-          <Link href="/teacher/grading">
-            <RetroButton
-              variant="yellow"
-              size="md"
-              icon={<ClipboardCheck className="w-4 h-4" />}
-            >
-              Meja Koreksi ({pendingSubs.length} Menunggu)
-            </RetroButton>
-          </Link>
+          <RetroButton
+            href="/teacher/activity-log"
+            variant="white"
+            size="md"
+            icon={<Activity className="w-4 h-4 text-[#008080]" />}
+          >
+            Log Aktivitas Siswa
+          </RetroButton>
+          <RetroButton
+            href="/teacher/grading"
+            variant="yellow"
+            size="md"
+            icon={<ClipboardCheck className="w-4 h-4" />}
+          >
+            Meja Koreksi ({pendingSubs.length} Menunggu)
+          </RetroButton>
         </div>
       </div>
 

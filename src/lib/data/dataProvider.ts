@@ -1324,7 +1324,7 @@ export class DataProvider {
     if (isFirebaseConfigured) {
       try {
         const firestoreLogs = await FirestoreService.getActivityLogs(200);
-        if (Array.isArray(firestoreLogs) && firestoreLogs.length > 0) {
+        if (Array.isArray(firestoreLogs)) {
           const logMap = new Map<string, ActivityLog>();
           const localLogs = safeGetItem<ActivityLog[]>(STORAGE_KEYS.ACTIVITY_LOGS, []);
 
@@ -1371,13 +1371,15 @@ export class DataProvider {
   ): void {
     const logs = this.getActivityLogs();
 
-    // Mencegah log berulang beruntun dalam jeda waktu singkat (double-click atau re-trigger cepat)
-    const recentDuplicate = logs.slice(0, 5).find(
+    // Mencegah log berulang beruntun dalam jeda waktu singkat
+    const isNavigationAction = ['LOGIN', 'OPEN_CHAPTER', 'STUDENT_PORTAL_VISIT'].includes(action);
+    const debounceWindow = isNavigationAction ? 60000 : 3000;
+    const recentDuplicate = logs.slice(0, 15).find(
       (l) =>
         l.userId === userId &&
         l.action === action &&
-        l.chapterId === chapterId &&
-        Math.abs(Date.now() - new Date(l.timestamp).getTime()) < 3000
+        (l.chapterId === chapterId || (!l.chapterId && !chapterId)) &&
+        Math.abs(Date.now() - new Date(l.timestamp).getTime()) < debounceWindow
     );
     if (recentDuplicate) {
       return;

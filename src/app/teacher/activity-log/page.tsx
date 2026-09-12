@@ -36,11 +36,11 @@ export default function TeacherActivityLogPage() {
   const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
     allowedRoles: ['teacher', 'admin'],
   });
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [classes, setClasses] = useState<ClassRoom[]>([]);
-  const [students, setStudents] = useState<User[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [logs, setLogs] = useState<ActivityLog[]>(() => DataProvider.getActivityLogs());
+  const [classes, setClasses] = useState<ClassRoom[]>(() => DataProvider.getClasses());
+  const [students, setStudents] = useState<User[]>(() => DataProvider.getUsers().filter((u) => u.role === 'student'));
+  const [courses, setCourses] = useState<Course[]>(() => DataProvider.getCourses());
+  const [isLoading, setIsLoading] = useState<boolean>(() => DataProvider.getActivityLogs().length === 0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [progressMap, setProgressMap] = useState<Record<string, UserCourseProgress>>({});
@@ -70,6 +70,9 @@ export default function TeacherActivityLogPage() {
         DataProvider.getCoursesAsync(),
       ]);
 
+      // Pastikan bab-bab materi tersinkronisasi untuk inspeksi progres siswa
+      Promise.all(allCourses.map((c) => DataProvider.getChaptersAsync(c.id))).catch(() => {});
+
       // Dapatkan hanya kelas-kelas yang diampu oleh Guru yang sedang login
       let taughtClassNames: string[] = [];
       if (me?.assignedClasses && me.assignedClasses.length > 0) {
@@ -81,28 +84,43 @@ export default function TeacherActivityLogPage() {
         );
       }
 
+      const normalize = (val?: string) =>
+        (val || '').toLowerCase().replace(/kelas\s*/i, '').replace(/[-\s]/g, '').trim();
+      const taughtNormalized = new Set(taughtClassNames.map(normalize));
+      const myCourseIds = new Set(allCourses.filter((c) => c.teacherId === me?.id).map((c) => c.id));
+
       // Filter kelas yang diampu
       const relevantClasses =
         taughtClassNames.length > 0
-          ? allClasses.filter((c) => taughtClassNames.includes(c.name))
+          ? allClasses.filter((c) => taughtClassNames.includes(c.name) || taughtNormalized.has(normalize(c.name)))
           : allClasses;
 
       // Filter siswa dari kelas yang diampu
       const allStudents = allUsers.filter((u) => u.role === 'student');
       const relevantStudents =
         taughtClassNames.length > 0
-          ? allStudents.filter((s) => s.gradeClass && taughtClassNames.includes(s.gradeClass))
+          ? allStudents.filter(
+              (s) =>
+                s.gradeClass &&
+                (taughtClassNames.includes(s.gradeClass) || taughtNormalized.has(normalize(s.gradeClass)))
+            )
           : allStudents;
 
-      // Filter log aktivitas hanya dari kelas yang diampu
+      // Filter log aktivitas hanya dari kelas atau materi milik guru yang bersangkutan
       const relevantLogs =
-        taughtClassNames.length > 0
-          ? allLogs.filter((l) => {
+        me?.role === 'admin' || taughtClassNames.length === 0
+          ? allLogs
+          : allLogs.filter((l) => {
+              // 1. Jika aktivitas pada materi pelajaran milik guru ini
+              if (l.courseId && myCourseIds.has(l.courseId)) return true;
+              // 2. Jika aktivitas oleh siswa pada kelas yang diampu
               const student = allUsers.find((u) => u.id === l.userId);
               const cls = l.userClass || student?.gradeClass;
-              return cls && taughtClassNames.includes(cls);
-            })
-          : allLogs;
+              if (cls && (taughtClassNames.includes(cls) || taughtNormalized.has(normalize(cls)))) return true;
+              // 3. Jika siswa tercatat di daftar siswa yang diajar
+              if (relevantStudents.some((s) => s.id === l.userId)) return true;
+              return false;
+            });
 
       setLogs(relevantLogs);
       setClasses(relevantClasses);
@@ -304,11 +322,9 @@ export default function TeacherActivityLogPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Top Breadcrumb & Live Sync Indicator */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Link href="/teacher">
-          <RetroButton variant="white" size="sm" icon={<ArrowLeft className="w-4 h-4" />}>
-            Kembali ke Dashboard Guru
-          </RetroButton>
-        </Link>
+        <RetroButton href="/teacher" variant="white" size="sm" icon={<ArrowLeft className="w-4 h-4" />}>
+          Kembali ke Dashboard Guru
+        </RetroButton>
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono font-bold bg-[#008080] text-white px-2.5 py-1 neo-border-sm flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />

@@ -100,11 +100,9 @@ export default function TeacherGradingPage() {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Top Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Link href="/teacher">
-          <RetroButton variant="white" size="sm" icon={<ArrowLeft className="w-4 h-4" />}>
-            Kembali ke Dashboard Guru
-          </RetroButton>
-        </Link>
+        <RetroButton href="/teacher" variant="white" size="sm" icon={<ArrowLeft className="w-4 h-4" />}>
+          Kembali ke Dashboard Guru
+        </RetroButton>
         <span className="text-xs font-mono font-bold bg-[#ffde59] px-2 py-1 neo-border-sm">
           SISTEM KOREKSI ESSAY BERBANTUAN KATA KUNCI (MODE B)
         </span>

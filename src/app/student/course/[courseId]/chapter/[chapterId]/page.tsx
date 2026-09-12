@@ -108,6 +108,21 @@ export default function ChapterViewPage() {
     loadData();
   }, [courseId, chapterId]);
 
+  useEffect(() => {
+    if (user && user.role === 'student' && chapter && courseId) {
+      DataProvider.logActivity(
+        user.id,
+        user.name,
+        'student',
+        'OPEN_CHAPTER',
+        `Membuka dan mulai mempelajari materi: ${chapter.title}.`,
+        courseId,
+        chapter.id,
+        user.gradeClass
+      );
+    }
+  }, [user?.id, chapter?.id, courseId]);
+
   if (isAuthLoading) {
     return (
       <div className="max-w-4xl mx-auto p-8 font-mono text-center flex flex-col items-center justify-center gap-2">
