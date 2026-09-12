@@ -628,9 +628,6 @@ export default function TeacherDashboard() {
           <h1 className="text-2xl sm:text-3xl font-black text-black">
             Selamat Bertugas, {user?.name || 'Guru Pembimbing'}! 📚
           </h1>
-          <p className="text-sm text-zinc-900 max-w-2xl font-sans">
-            Kelola materi ajar, modul PDF, tautan, dan penugasan siswa dengan alur belajar berurutan bergaya Moodle.
-          </p>
         </div>
 
         {/* Action Shortcuts */}
@@ -770,17 +767,6 @@ export default function TeacherDashboard() {
               )}
             </div>
           </RetroWindow>
-
-          {/* Sequential Path Education Card */}
-          <div className="p-4 bg-[#fffde6] neo-border font-mono text-xs space-y-2">
-            <div className="font-bold flex items-center gap-1.5 text-zinc-900">
-              <Layers className="w-4 h-4 text-amber-600" />
-              <span>Prinsip Pembelajaran Berurutan:</span>
-            </div>
-            <p className="text-zinc-700 leading-relaxed">
-              Materi pertama (Urutan 1) otomatis terbuka bagi siswa. Siswa harus menyelesaikan materi di atas agar materi di bawahnya terbuka.
-            </p>
-          </div>
         </div>
 
         {/* Right 2 Cols: Chapters Management & Builder */}
@@ -1000,14 +986,13 @@ export default function TeacherDashboard() {
 
                                 {/* Action buttons */}
                                 <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                                  <Link href={`/student/course/${selectedCourse.id}/chapter/${main.id}`}>
-                                    <button
-                                      title="Pratinjau Siswa"
-                                      className="p-1.5 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black flex items-center gap-1 font-mono text-xs font-bold"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" />
-                                      <span>Pratinjau</span>
-                                    </button>
+                                  <Link
+                                    href={`/student/course/${selectedCourse.id}/chapter/${main.id}`}
+                                    title="Pratinjau Siswa"
+                                    className="p-1.5 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black inline-flex items-center gap-1 font-mono text-xs font-bold"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>Pratinjau</span>
                                   </Link>
                                   <button
                                     onClick={() => handleOpenAddAssignmentModal(bab.babNumber, bab.babTitle, main.id)}
@@ -1074,14 +1059,13 @@ export default function TeacherDashboard() {
                                   </div>
 
                                   <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                                    <Link href={`/student/course/${selectedCourse.id}/chapter/${asg.id}`}>
-                                      <button
-                                        title="Pratinjau Tugas"
-                                        className="p-1 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black flex items-center gap-1 font-mono text-[11px] font-bold"
-                                      >
-                                        <Eye className="w-3 h-3" />
-                                        <span>Pratinjau</span>
-                                      </button>
+                                    <Link
+                                      href={`/student/course/${selectedCourse.id}/chapter/${asg.id}`}
+                                      title="Pratinjau Tugas"
+                                      className="p-1 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black inline-flex items-center gap-1 font-mono text-[11px] font-bold"
+                                    >
+                                      <Eye className="w-3 h-3" />
+                                      <span>Pratinjau</span>
                                     </Link>
                                     <button
                                       onClick={() => handleOpenEditModal(asg)}
@@ -1134,14 +1118,13 @@ export default function TeacherDashboard() {
                               </div>
 
                               <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-                                <Link href={`/student/course/${selectedCourse.id}/chapter/${asg.id}`}>
-                                  <button
-                                    title="Pratinjau Tugas"
-                                    className="p-1 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black flex items-center gap-1 font-mono text-[11px] font-bold"
-                                  >
-                                    <Eye className="w-3 h-3" />
-                                    <span>Pratinjau</span>
-                                  </button>
+                                <Link
+                                  href={`/student/course/${selectedCourse.id}/chapter/${asg.id}`}
+                                  title="Pratinjau Tugas"
+                                  className="p-1 px-2 bg-white hover:bg-zinc-100 neo-border-sm text-black inline-flex items-center gap-1 font-mono text-[11px] font-bold"
+                                >
+                                  <Eye className="w-3 h-3" />
+                                  <span>Pratinjau</span>
                                 </Link>
                                 <button
                                   onClick={() => handleOpenEditModal(asg)}

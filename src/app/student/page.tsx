@@ -205,9 +205,6 @@ export default function StudentDashboard() {
           <h1 className="text-2xl sm:text-3xl font-black text-white">
             Selamat Datang, {user.name}!
           </h1>
-          <p className="text-sm font-sans text-teal-50 max-w-2xl">
-            Sistem pembelajaran ini menerapkan <strong>Sequential Learning Path</strong>. Selesaikan setiap bab secara berurutan dan raih bintang prestasi!
-          </p>
         </div>
 
         {/* Quick Stats Pill with XP Progress Bar */}
@@ -482,15 +479,14 @@ export default function StudentDashboard() {
                                       {/* Action Button */}
                                       <div className="sm:self-center shrink-0">
                                         {check.canAccess ? (
-                                          <Link href={`/student/course/${course.id}/chapter/${ch.id}`}>
-                                            <RetroButton
-                                              variant={isCompleted ? 'white' : isAssignmentChild ? 'blue' : 'yellow'}
-                                              size="sm"
-                                              icon={<ArrowRight className="w-4 h-4" />}
-                                            >
-                                              {isCompleted ? 'Pelajari Ulang' : isAssignmentChild ? 'Kerjakan Tugas ✍️' : 'Buka Materi'}
-                                            </RetroButton>
-                                          </Link>
+                                          <RetroButton
+                                            href={`/student/course/${course.id}/chapter/${ch.id}`}
+                                            variant={isCompleted ? 'white' : isAssignmentChild ? 'blue' : 'yellow'}
+                                            size="sm"
+                                            icon={<ArrowRight className="w-4 h-4" />}
+                                          >
+                                            {isCompleted ? 'Pelajari Ulang' : isAssignmentChild ? 'Kerjakan Tugas ✍️' : 'Buka Materi'}
+                                          </RetroButton>
                                         ) : (
                                           <RetroButton variant="gray" size="sm" disabled icon={<Lock className="w-4 h-4" />}>
                                             Terkunci
@@ -677,18 +673,6 @@ export default function StudentDashboard() {
               </Link>
             </div>
           </RetroWindow>
-
-          {/* Sequential Rule Information Box */}
-          <div className="bg-white neo-border neo-shadow-sm p-4 space-y-2 font-mono text-xs">
-            <div className="font-bold text-sm text-black flex items-center gap-1.5 border-b-2 border-black pb-1">
-              <span>ℹ️</span> ATURAN ALUR BERURUTAN
-            </div>
-            <p className="text-zinc-700 leading-relaxed">
-              1. Bab 1 selalu dibuka pertama kali.<br />
-              2. Bab selanjutnya hanya terbuka jika bab sebelumnya telah selesai dan memperoleh nilai minimal 75.<br />
-              3. Kuis essay uraian membutuhkan konfirmasi koreksi nilai dari Guru.
-            </p>
-          </div>
         </div>
       </div>
       )}

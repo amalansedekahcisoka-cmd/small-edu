@@ -36,43 +36,71 @@ export default function ChapterViewPage() {
   const { user: authUser, isAuthorized, isLoading: isAuthLoading } = useAuthGuard({
     allowedRoles: ['student', 'teacher', 'admin'],
   });
-  const courseId = params.courseId as string;
-  const chapterId = params.chapterId as string;
+  const rawCourseId = params?.courseId;
+  const courseId = decodeURIComponent(Array.isArray(rawCourseId) ? rawCourseId[0] : (rawCourseId as string || ''));
+  const rawChapterId = params?.chapterId;
+  const chapterId = decodeURIComponent(Array.isArray(rawChapterId) ? rawChapterId[0] : (rawChapterId as string || ''));
 
-  const [user, setUser] = useState<User | null>(null);
-  const [course, setCourse] = useState<Course | null>(null);
-  const [chapter, setChapter] = useState<Chapter | null>(null);
-  const [allChapters, setAllChapters] = useState<Chapter[]>([]);
-  const [progress, setProgress] = useState<UserCourseProgress | null>(null);
+  const [user, setUser] = useState<User | null>(() => DataProvider.getCurrentUser());
+  const [course, setCourse] = useState<Course | null>(() => {
+    return DataProvider.getCourseById(courseId) || DataProvider.getCourses().find((c) => c.id === courseId) || null;
+  });
+  const [chapter, setChapter] = useState<Chapter | null>(() => {
+    const chs = DataProvider.getChapters(courseId);
+    return chs.find((ch) => ch.id === chapterId) || null;
+  });
+  const [allChapters, setAllChapters] = useState<Chapter[]>(() => DataProvider.getChapters(courseId));
+  const [progress, setProgress] = useState<UserCourseProgress | null>(() => {
+    const u = DataProvider.getCurrentUser();
+    return u ? DataProvider.getUserProgress(u.id, courseId) : null;
+  });
   const [assignmentFile, setAssignmentFile] = useState<string>('');
   const [assignmentSubmitted, setAssignmentSubmitted] = useState<boolean>(false);
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
 
   const loadData = async () => {
-    let currentUser = DataProvider.getCurrentUser();
-    setUser(currentUser);
+    try {
+      let currentUser = DataProvider.getCurrentUser();
+      if (currentUser) setUser(currentUser);
 
-    const courses = await DataProvider.getCoursesAsync();
-    const c = courses.find((item) => item.id === courseId) || DataProvider.getCourseById(courseId);
-    setCourse(c || null);
+      const localCourse = DataProvider.getCourseById(courseId) || DataProvider.getCourses().find((item) => item.id === courseId);
+      if (localCourse) setCourse(localCourse);
 
-    const chs = await DataProvider.getChaptersAsync(courseId);
-    setAllChapters(chs);
-
-    const currentCh = chs.find((ch) => ch.id === chapterId);
-    setChapter(currentCh || null);
-
-    if (currentUser) {
-      DataProvider.syncUserActivityPoints(currentUser.id);
-      currentUser = DataProvider.getCurrentUser();
-      setUser(currentUser);
-      if (currentUser) {
-        const p = DataProvider.getUserProgress(currentUser.id, courseId);
-        setProgress(p);
-
-        DataProvider.getUserProgressAsync(currentUser.id, courseId).then((asyncP) => {
-          if (asyncP) setProgress(asyncP);
-        }).catch(() => {});
+      const localChapters = DataProvider.getChapters(courseId);
+      if (localChapters.length > 0) {
+        setAllChapters(localChapters);
+        const localCh = localChapters.find((ch) => ch.id === chapterId);
+        if (localCh) setChapter(localCh);
       }
+
+      const courses = await DataProvider.getCoursesAsync();
+      const c = courses.find((item) => item.id === courseId) || localCourse;
+      if (c) setCourse(c);
+
+      const chs = await DataProvider.getChaptersAsync(courseId);
+      if (chs.length > 0) {
+        setAllChapters(chs);
+        const currentCh = chs.find((ch) => ch.id === chapterId);
+        if (currentCh) setChapter(currentCh);
+      }
+
+      if (currentUser) {
+        DataProvider.syncUserActivityPoints(currentUser.id);
+        currentUser = DataProvider.getCurrentUser();
+        if (currentUser) setUser(currentUser);
+        if (currentUser) {
+          const p = DataProvider.getUserProgress(currentUser.id, courseId);
+          if (p) setProgress(p);
+
+          DataProvider.getUserProgressAsync(currentUser.id, courseId).then((asyncP) => {
+            if (asyncP) setProgress(asyncP);
+          }).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('Error loading chapter page data:', e);
+    } finally {
+      setIsDataLoaded(true);
     }
   };
 
@@ -80,11 +108,47 @@ export default function ChapterViewPage() {
     loadData();
   }, [courseId, chapterId]);
 
-  if (isAuthLoading || !isAuthorized || !user || !course || !chapter) {
+  if (isAuthLoading) {
     return (
       <div className="max-w-4xl mx-auto p-8 font-mono text-center flex flex-col items-center justify-center gap-2">
         <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
-        <span>Memverifikasi sesi & konten pembelajaran...</span>
+        <span>Memverifikasi sesi & hak akses...</span>
+      </div>
+    );
+  }
+
+  if (!isAuthorized || !user) {
+    return null;
+  }
+
+  if (!course || !chapter) {
+    if (!isDataLoaded) {
+      return (
+        <div className="max-w-4xl mx-auto p-8 font-mono text-center flex flex-col items-center justify-center gap-2">
+          <div className="w-8 h-8 border-4 border-[#008080] border-t-transparent animate-spin"></div>
+          <span>Memuat konten materi ajar...</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="max-w-xl mx-auto px-4 py-16 text-center space-y-4 font-mono">
+        <div className="p-6 bg-white neo-border neo-shadow space-y-4">
+          <div className="text-3xl">⚠️</div>
+          <h2 className="text-xl font-black text-black">Materi Tidak Ditemukan</h2>
+          <p className="text-xs text-zinc-600 leading-relaxed">
+            Materi pembelajaran ini belum tersedia atau telah diperbarui oleh Guru Pembimbing.
+          </p>
+          <div className="pt-2">
+            <RetroButton
+              href={user.role === 'teacher' || user.role === 'admin' ? '/teacher' : '/student'}
+              variant="teal"
+              icon={<ArrowLeft className="w-4 h-4" />}
+            >
+              {user.role === 'teacher' || user.role === 'admin' ? 'Kembali ke Panel Guru' : 'Kembali ke Ruang Belajar'}
+            </RetroButton>
+          </div>
+        </div>
       </div>
     );
   }
@@ -393,30 +457,26 @@ export default function ChapterViewPage() {
             </p>
 
             <div className="pt-4 flex items-center justify-center gap-3 flex-wrap">
-              <Link href="/student">
-                <RetroButton variant="white" icon={<ArrowLeft className="w-4 h-4" />}>
-                  Kembali ke Peta Belajar
-                </RetroButton>
-              </Link>
+              <RetroButton href="/student" variant="white" icon={<ArrowLeft className="w-4 h-4" />}>
+                Kembali ke Peta Belajar
+              </RetroButton>
 
               {accessCheck.overdueChapter && (
-                <Link
+                <RetroButton
                   href={`/student/course/${courseId}/chapter/${accessCheck.overdueChapter.id}`}
+                  variant="yellow"
                 >
-                  <RetroButton variant="yellow">
-                    Inspeksi Bab {accessCheck.overdueChapter.order_index} →
-                  </RetroButton>
-                </Link>
+                  Inspeksi Bab {accessCheck.overdueChapter.order_index} →
+                </RetroButton>
               )}
 
               {!isOverdue && accessCheck.previousChapter && (
-                <Link
+                <RetroButton
                   href={`/student/course/${courseId}/chapter/${accessCheck.previousChapter.id}`}
+                  variant="teal"
                 >
-                  <RetroButton variant="teal">
-                    Buka Bab {accessCheck.previousChapter.order_index} Sekarang →
-                  </RetroButton>
-                </Link>
+                  Buka Bab {accessCheck.previousChapter.order_index} Sekarang →
+                </RetroButton>
               )}
             </div>
           </div>
@@ -435,21 +495,22 @@ export default function ChapterViewPage() {
             <span className="bg-black text-white px-2 py-0.5 neo-border-sm">PRATINJAU GURU</span>
             <span>Anda sedang menguji materi ajar ini sebagai Guru Pembimbing (Akses Tidak Dibatasi).</span>
           </div>
-          <Link href="/teacher">
-            <RetroButton variant="teal" size="sm" icon={<ArrowLeft className="w-3.5 h-3.5" />}>
-              Kembali ke Panel Guru
-            </RetroButton>
-          </Link>
+          <RetroButton href="/teacher" variant="teal" size="sm" icon={<ArrowLeft className="w-3.5 h-3.5" />}>
+            Kembali ke Panel Guru
+          </RetroButton>
         </div>
       )}
 
       {/* Top Breadcrumb & Navigation */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <Link href={isTeacher ? '/teacher' : '/student'}>
-          <RetroButton variant="white" size="sm" icon={<ArrowLeft className="w-4 h-4" />}>
-            {isTeacher ? 'Kembali ke Panel Guru' : 'Kembali ke Peta Bab'}
-          </RetroButton>
-        </Link>
+        <RetroButton
+          href={isTeacher ? '/teacher' : '/student'}
+          variant="white"
+          size="sm"
+          icon={<ArrowLeft className="w-4 h-4" />}
+        >
+          {isTeacher ? 'Kembali ke Panel Guru' : 'Kembali ke Peta Bab'}
+        </RetroButton>
 
         <div className="flex items-center gap-2 flex-wrap">
           {(() => {

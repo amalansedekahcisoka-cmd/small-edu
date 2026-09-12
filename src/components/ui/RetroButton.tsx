@@ -6,6 +6,7 @@ interface RetroButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
   variant?: 'teal' | 'yellow' | 'coral' | 'blue' | 'gray' | 'white' | 'dark';
   size?: 'sm' | 'md' | 'lg';
   icon?: React.ReactNode;
+  href?: string;
 }
 
 export const RetroButton: React.FC<RetroButtonProps> = ({
@@ -15,6 +16,7 @@ export const RetroButton: React.FC<RetroButtonProps> = ({
   icon,
   className = '',
   disabled,
+  href,
   ...props
 }) => {
   const getVariantStyles = () => {
@@ -49,10 +51,21 @@ export const RetroButton: React.FC<RetroButtonProps> = ({
     }
   };
 
+  const baseClasses = `neo-btn inline-flex items-center justify-center gap-2 rounded-none select-none cursor-pointer ${getVariantStyles()} ${getSizeStyles()} ${className}`;
+
+  if (href && !disabled) {
+    return (
+      <a href={href} className={baseClasses}>
+        {icon && <span className="shrink-0">{icon}</span>}
+        <span>{children}</span>
+      </a>
+    );
+  }
+
   return (
     <button
       disabled={disabled}
-      className={`neo-btn inline-flex items-center justify-center gap-2 rounded-none ${getVariantStyles()} ${getSizeStyles()} ${className}`}
+      className={baseClasses}
       {...props}
     >
       {icon && <span className="shrink-0">{icon}</span>}

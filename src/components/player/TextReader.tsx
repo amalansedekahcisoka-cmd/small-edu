@@ -123,7 +123,7 @@ export const TextReader: React.FC<TextReaderProps> = ({
         icon={<BookOpen className="w-4 h-4" />}
       >
         <div className="prose max-w-none space-y-4 text-zinc-900 leading-relaxed font-sans text-sm sm:text-base">
-          {textContent.split('\n\n').map((paragraph, index) => {
+          {(textContent?.trim() || 'Modul materi literasi belum memiliki uraian teks bacaan.').split('\n\n').map((paragraph, index) => {
             if (paragraph.startsWith('# ')) {
               return (
                 <h1
