@@ -45,6 +45,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
   const [isExamStarted, setIsExamStarted] = useState<boolean>(false);
   const [isSubmitted, setIsSubmitted] = useState<boolean>(false);
   const [submissionResult, setSubmissionResult] = useState<Submission | null>(null);
+  const [attemptNumber, setAttemptNumber] = useState<number>(1);
 
   // Cek ketersediaan rentang hari
   const now = new Date();
@@ -54,20 +55,44 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
   const isBeforeSchedule = startDate ? now < startDate : false;
   const isAfterSchedule = endDate ? now > endDate : false;
 
-  // Cek progres yang sudah ada sebelumnya
-  useEffect(() => {
-    const prog = DataProvider.getUserProgress(userId, courseId);
-    const chProg = prog.chapters[chapter.id];
-    if (chProg?.status === 'waiting_grading' || chProg?.is_completed) {
-      // Ambil submission terakhir
-      const subs = DataProvider.getSubmissions().filter(
-        (s) => s.chapterId === chapter.id && s.studentId === userId
-      );
-      if (subs.length > 0) {
-        setIsSubmitted(true);
-        setSubmissionResult(subs[0]);
-      }
+  // Sinkronisasi progres dan riwayat submission (Lokal & Firestore)
+  const syncExamState = async () => {
+    // 1. Cek data lokal terlebih dahulu untuk respon instan
+    const localSubs = DataProvider.getSubmissions()
+      .filter((s) => s.chapterId === chapter.id && s.studentId === userId)
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+    if (localSubs.length > 0) {
+      const latest = localSubs[0];
+      setSubmissionResult(latest);
+      setIsSubmitted(true);
+      setAttemptNumber(latest.attemptNumber || localSubs.length);
     }
+
+    // 2. Sinkronkan dengan Cloud Firestore untuk multi-device / multi-tab
+    try {
+      const [asyncProg, asyncSubs] = await Promise.all([
+        DataProvider.getUserProgressAsync(userId, courseId),
+        DataProvider.getSubmissionsAsync(),
+      ]);
+
+      const studentSubs = (asyncSubs || [])
+        .filter((s) => s.chapterId === chapter.id && s.studentId === userId)
+        .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+
+      if (studentSubs.length > 0) {
+        const latest = studentSubs[0];
+        setSubmissionResult(latest);
+        setIsSubmitted(true);
+        setAttemptNumber(latest.attemptNumber || studentSubs.length);
+      }
+    } catch (err) {
+      console.warn('Error syncing exam state with Firestore:', err);
+    }
+  };
+
+  useEffect(() => {
+    syncExamState();
   }, [chapter.id, courseId, userId]);
 
   // Load timer dari localStorage agar tahan refresh
@@ -101,6 +126,17 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
 
   const handleStartExam = () => {
     setIsExamStarted(true);
+    setAttemptNumber(1);
+    localStorage.setItem(storageKeyTimer, Date.now().toString());
+  };
+
+  const handleStartRemedial = () => {
+    setIsSubmitted(false);
+    setIsExamStarted(true);
+    setAnswers({});
+    setCurrentQuestionIndex(0);
+    setAttemptNumber(2);
+    setTimeLeft(durationSec);
     localStorage.setItem(storageKeyTimer, Date.now().toString());
   };
 
@@ -133,8 +169,13 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
 
   const handleSubmit = () => {
     const grading = gradeQuizSubmission(questions, answers);
+    const passingScore = chapter.passing_grade ?? 75;
+    const isPassed = grading.finalPercentage >= passingScore;
+    const currentAttempt = attemptNumber;
+    const maxAttempts = 2;
+    const remedialAllowed = !isPassed && currentAttempt < maxAttempts;
 
-    // Simpan submission
+    // Simpan submission dengan nomor percobaan (Attempt Number)
     const newSub = DataProvider.saveSubmission({
       courseId,
       chapterId: chapter.id,
@@ -145,6 +186,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
       finalScore: grading.finalPercentage,
       status: grading.hasLongEssayPending ? 'pending' : 'graded',
       modeBAnalysis: grading.modeBAnalyses,
+      attemptNumber: currentAttempt,
     });
 
     localStorage.removeItem(storageKeyTimer);
@@ -157,20 +199,21 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
         is_completed: false,
         score: grading.finalPercentage,
         status: 'waiting_grading',
+        attemptCount: currentAttempt,
+        maxAttempts,
+        remedialAllowed: false,
       });
       DataProvider.logActivity(
         userId,
         userName,
         'student',
-        'SUBMIT_EXAM_PENDING_GRADING',
-        `Mengirim lembar ujian ${chapter.title}. Menunggu verifikasi essay dari guru.`,
+        currentAttempt === 2 ? 'SUBMIT_EXAM_REMEDIAL' : 'SUBMIT_EXAM_PENDING_GRADING',
+        `Mengirim lembar ujian ${chapter.title} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}). Menunggu verifikasi essay dari guru.`,
         courseId,
         chapter.id
       );
     } else {
       // Auto-graded completely
-      const passingScore = chapter.passing_grade ?? 75;
-      const isPassed = grading.finalPercentage >= passingScore;
       const p5Status = getP5ProgressInfo(grading.finalPercentage);
 
       // Cek apakah bab ini sudah pernah selesai atau klaim XP sebelumnya
@@ -183,6 +226,9 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
         is_completed: isPassed,
         score: grading.finalPercentage,
         status: isPassed ? 'passed' : 'failed',
+        attemptCount: currentAttempt,
+        maxAttempts,
+        remedialAllowed,
       });
 
       DataProvider.logActivity(
@@ -190,7 +236,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
         userName,
         'student',
         'UJIAN_SELESAI',
-        `Menyelesaikan kuis/penilaian ${chapter.title} dengan skor ${grading.finalPercentage} (${isPassed ? 'Lulus' : 'Belum Lulus'} - ${p5Status.label}).`,
+        `Menyelesaikan kuis/penilaian ${chapter.title} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) dengan skor ${grading.finalPercentage} (${isPassed ? 'Lulus' : 'Belum Lulus'} - ${p5Status.label}).`,
         courseId,
         chapter.id
       );
@@ -228,7 +274,6 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
           confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
         }
       } else if (isPassed) {
-        // Sudah pernah lulus & klaim XP sebelumnya, berikan efek visual tanpa dobel XP
         confetti({ particleCount: 40, spread: 50 });
       }
     }
@@ -256,7 +301,10 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             <h3 className="font-black text-lg">Peraturan & Ketentuan Pengerjaan</h3>
             <ul className="text-sm space-y-2 font-mono list-disc list-inside">
               <li>
-                <strong>Target Capaian Pembelajaran:</strong> {chapter.passing_grade || 75} Poin.
+                <strong>Target Capaian Pembelajaran (KKM):</strong> {chapter.passing_grade || 75} Poin.
+              </li>
+              <li>
+                <strong>Batas Kesempatan Pengerjaan:</strong> Maksimal 2 Kali (1x Ujian Reguler + 1x Ujian Remedial jika nilai belum mencapai KKM).
               </li>
               <li>
                 <strong>Batas Waktu Pengerjaan:</strong> {chapter.durationMinutes || 20} Menit.
@@ -314,41 +362,128 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
     );
   }
 
-  // Tampilan 2: Lembar Hasil Ujian
+  // Tampilan 2: Lembar Hasil Ujian (Menunggu Koreksi, Lulus KKM, Remedial, atau Kesempatan Habis)
   if (isSubmitted && submissionResult) {
     const isPending = submissionResult.status === 'pending';
-    const p5 = getP5ProgressInfo(submissionResult.finalScore);
+    const passingScore = chapter.passing_grade ?? 75;
+    const finalScore = submissionResult.finalScore ?? 0;
+    const isPassed = finalScore >= passingScore;
+    const currentAttempt = submissionResult.attemptNumber || attemptNumber || 1;
+    const canRemedial = !isPassed && currentAttempt < 2;
+    const p5 = getP5ProgressInfo(finalScore);
 
     return (
       <RetroWindow
         title={`LEMBAR HASIL: ${chapter.title}`}
-        headerColor={isPending ? 'mustard' : 'teal'}
+        headerColor={isPending ? 'mustard' : isPassed ? 'teal' : canRemedial ? 'mustard' : 'gray'}
         icon={<FileCheck2 className="w-4 h-4" />}
       >
         <div className="space-y-6">
-          <div className="p-6 neo-border text-center space-y-3 bg-[#f0f9ff]">
-            <h2 className="text-xl font-black text-blue-950">
+          {/* Status Utama */}
+          <div
+            className={`p-6 neo-border text-center space-y-3 ${
+              isPending
+                ? 'bg-[#fffde6]'
+                : isPassed
+                ? 'bg-[#ecfbf3]'
+                : canRemedial
+                ? 'bg-[#fff5f5]'
+                : 'bg-[#f4f4f4]'
+            }`}
+          >
+            <h2 className="text-xl font-black text-black">
               {isPending
-                ? '📝 JAWABAN BERHASIL DIKIRIM'
-                : '🎯 CAPAIAN PEMBELAJARAN TUNTAS'}
+                ? '📝 JAWABAN BERHASIL DIKIRIM (MENUNGGU VERIFIKASI GURU)'
+                : isPassed
+                ? '🎉 CAPAIAN PEMBELAJARAN TUNTAS (LULUS)'
+                : canRemedial
+                ? '⚠️ NILAI BELUM MENCAPAI KKM (KESEMPATAN REMEDIAL TERSEDIA)'
+                : '❌ HASIL AKHIR: BELUM MENCAPAI KKM'}
             </h2>
 
-            <div className="text-4xl font-mono font-black py-2 text-black">
-              SKOR: {submissionResult.finalScore} / 100
+            <div
+              className={`text-5xl font-mono font-black py-2 ${
+                isPassed ? 'text-emerald-700' : isPending ? 'text-blue-900' : 'text-red-600'
+              }`}
+            >
+              SKOR: {finalScore} / 100
             </div>
 
-            {!isPending && (
-              <div className="inline-block px-4 py-1.5 rounded-full border-2 border-black font-black text-sm shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] bg-amber-300 text-black">
-                {p5.code} — {p5.label}
-              </div>
-            )}
+            <div className="flex items-center justify-center gap-2 flex-wrap font-mono text-xs">
+              <span className="px-3 py-1 bg-white neo-border-sm font-bold text-black">
+                Target KKM: {passingScore} Poin
+              </span>
 
-            <p className="font-mono text-xs sm:text-sm max-w-xl mx-auto text-zinc-700 leading-relaxed">
+              <span
+                className={`px-3 py-1 neo-border-sm font-bold ${
+                  currentAttempt === 2
+                    ? 'bg-purple-200 text-purple-950'
+                    : 'bg-blue-100 text-blue-950'
+                }`}
+              >
+                {currentAttempt === 2 ? 'Percobaan 2 (Remedial)' : 'Percobaan 1 (Ujian Reguler)'}
+              </span>
+
+              {!isPending && (
+                <span
+                  className={`px-3 py-1 neo-border-sm font-black ${
+                    isPassed
+                      ? 'bg-emerald-300 text-emerald-950'
+                      : 'bg-red-200 text-red-950'
+                  }`}
+                >
+                  {isPassed ? 'LULUS KKM' : 'BELUM CAPAI KKM'}
+                </span>
+              )}
+            </div>
+
+            <p className="font-mono text-xs sm:text-sm max-w-xl mx-auto text-zinc-700 leading-relaxed pt-1">
               {isPending
-                ? 'Soal uraian telah tersimpan dan dianalisis kata kuncinya oleh sistem. Menunggu konfirmasi akhir dari Guru Pengampu.'
-                : p5.encouragement}
+                ? 'Soal essay uraian telah tersimpan dan dianalisis kata kuncinya oleh sistem. Menunggu konfirmasi dan pengesahan nilai akhir dari Guru Pengampu.'
+                : isPassed
+                ? p5.encouragement
+                : canRemedial
+                ? `Nilai Anda (${finalScore}) belum mencapai batas KKM (${passingScore}). Anda memiliki 1 kali kesempatan ujian remedial untuk memperbaiki nilai dan membuka bab selanjutnya.`
+                : `Anda telah menggunakan seluruh kesempatan pengerjaan (2 dari 2 kali). Nilai ini telah terkunci permanen di sistem rapor.`}
             </p>
           </div>
+
+          {/* Catatan & Evaluasi Guru (JIKA SUDAH DIKOREKSI GURU) */}
+          {!isPending && submissionResult.teacherFeedback && (
+            <div className="bg-[#fff9db] neo-border p-4 text-left space-y-2">
+              <div className="font-mono font-bold text-xs text-amber-950 flex items-center gap-1.5">
+                <span>💬 Catatan & Umpan Balik Guru ({submissionResult.gradedBy || 'Guru Pengampu'}):</span>
+              </div>
+              <div className="p-3 bg-white neo-border-sm text-sm font-sans italic text-zinc-900 leading-relaxed">
+                "{submissionResult.teacherFeedback}"
+              </div>
+            </div>
+          )}
+
+          {/* KOTAK AKSI UJIAN REMEDIAL (JIKA BELUM LULUS & MASIH ADA KESEMPATAN) */}
+          {!isPending && canRemedial && (
+            <div className="bg-[#e6fffa] neo-border p-5 text-center space-y-3">
+              <div className="inline-block px-3 py-1 bg-[#008080] text-white font-mono font-black text-xs neo-border-sm">
+                KESEMPATAN TERAKHIR: 1x UJIAN REMEDIAL
+              </div>
+              <h3 className="font-black text-lg text-teal-950">
+                Ambil Ujian Remedial Sekarang
+              </h3>
+              <p className="font-mono text-xs text-zinc-700 max-w-lg mx-auto leading-relaxed">
+                Pelajari kembali materi dan catatan dari guru di atas. Klik tombol di bawah untuk memulai kesempatan ujian remedial ke-2 (terakhir).
+              </p>
+              <div className="pt-2">
+                <RetroButton
+                  variant="teal"
+                  size="lg"
+                  onClick={handleStartRemedial}
+                  icon={<RotateCcw className="w-5 h-5" />}
+                >
+                  Mulai Ujian Remedial (Percobaan 2 / Terakhir)
+                </RetroButton>
+              </div>
+            </div>
+          )}
 
           {/* Rincian Analisis Kata Kunci (Mode B Preview untuk Siswa) */}
           {submissionResult.modeBAnalysis && submissionResult.modeBAnalysis.length > 0 && (
@@ -384,22 +519,6 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
               ))}
             </div>
           )}
-
-          {!isPending && (
-            <div className="flex justify-center gap-3 pt-2">
-              <RetroButton
-                variant="white"
-                onClick={() => {
-                  setIsSubmitted(false);
-                  setIsExamStarted(false);
-                  setAnswers({});
-                }}
-                icon={<RotateCcw className="w-4 h-4" />}
-              >
-                Perdalam Pemahaman / Coba Lagi
-              </RetroButton>
-            </div>
-          )}
         </div>
       </RetroWindow>
     );
@@ -412,7 +531,7 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
     <div className="space-y-4">
       {/* Floating Neobrutalism Sticky Countdown Timer */}
       <div className="sticky top-[80px] z-40 bg-[#008080] text-white neo-border neo-shadow-sm p-3 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 font-mono font-bold text-sm">
+        <div className="flex items-center gap-2 font-mono font-bold text-sm flex-wrap">
           <Clock className={`w-5 h-5 ${timeLeft < 300 ? 'text-red-300 animate-bounce' : 'text-white'}`} />
           <span>SISA WAKTU:</span>
           <span
@@ -422,6 +541,11 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
           >
             {formatTime(timeLeft)}
           </span>
+          {attemptNumber === 2 && (
+            <span className="px-2 py-0.5 bg-yellow-300 text-black border border-black text-xs font-black shadow-[1px_1px_0px_0px_rgba(0,0,0,1)]">
+              🔴 REMEDIAL (PERCOBAAN 2/2)
+            </span>
+          )}
         </div>
 
         {/* Soal Navigator Badges */}

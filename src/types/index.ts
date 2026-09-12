@@ -157,6 +157,10 @@ export interface ChapterProgress {
   lastAttemptAt?: string;
   startedAt?: string; // For countdown timer persistence
   xpClaimed?: boolean;
+  attemptCount?: number;       // 1 (reguler) atau 2 (remedial)
+  maxAttempts?: number;        // default 2
+  remedialAllowed?: boolean;   // true jika score < KKM dan attemptCount < 2
+  teacherFeedback?: string;    // Catatan guru saat pengesahan
 }
 
 export interface UserCourseProgress {
@@ -194,6 +198,7 @@ export interface Submission {
   teacherFeedback?: string;
   gradedBy?: string;
   gradedAt?: string;
+  attemptNumber?: number;      // 1 (reguler) atau 2 (remedial)
 }
 
 export type StarCategory =

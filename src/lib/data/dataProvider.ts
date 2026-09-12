@@ -1015,11 +1015,23 @@ export class DataProvider {
 
     FirestoreService.saveSubmission(updated).catch(console.error);
 
-    const isPassed = finalScore >= 75;
+    const chapters = this.getChapters(target.courseId);
+    const chapter = chapters.find((c) => c.id === target.chapterId);
+    const passingGrade = chapter?.passing_grade ?? 75;
+    const isPassed = finalScore >= passingGrade;
+
+    const currentAttempt = target.attemptNumber || 1;
+    const maxAttempts = 2;
+    const remedialAllowed = !isPassed && currentAttempt < maxAttempts;
+
     this.updateChapterProgress(target.studentId, target.courseId, target.chapterId, {
       is_completed: isPassed,
       score: finalScore,
       status: isPassed ? 'passed' : 'failed',
+      attemptCount: currentAttempt,
+      maxAttempts,
+      remedialAllowed,
+      teacherFeedback: feedback,
     });
 
     this.logActivity(
@@ -1027,7 +1039,7 @@ export class DataProvider {
       target.studentName,
       'student',
       'SUBMISSION_GRADED',
-      `Tugas/Kuis diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (${isPassed ? 'Lulus' : 'Belum Lulus'}).`,
+      `Tugas/Kuis ${chapter?.title || ''} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (KKM: ${passingGrade} - ${isPassed ? 'Lulus' : currentAttempt < 2 ? 'Belum Lulus / Remedial Tersedia' : 'Belum Lulus / Kesempatan Habis'}).`,
       target.courseId,
       target.chapterId
     );

@@ -426,6 +426,18 @@ export default function StudentDashboard() {
                                               </RetroBadge>
                                             )}
 
+                                            {!isCompleted && !isWaitingGrading && chProg?.status === 'failed' && (
+                                              <RetroBadge
+                                                variant={(chProg?.attemptCount || 1) < 2 ? 'yellow' : 'red'}
+                                                size="sm"
+                                                icon={<AlertTriangle className="w-3 h-3" />}
+                                              >
+                                                {(chProg?.attemptCount || 1) < 2
+                                                  ? `⚠️ REMEDIAL TERSEDIA (SKOR: ${score ?? 0} / KKM ${ch.passing_grade || 75})`
+                                                  : `❌ BELUM TUNTAS (SKOR: ${score ?? 0})`}
+                                              </RetroBadge>
+                                            )}
+
                                             {ch.schedule?.isEnabled && ch.schedule.endDate && (
                                               <RetroBadge variant="purple" size="sm" icon={<Clock className="w-3 h-3" />}>
                                                 TENGGAT: {new Date(ch.schedule.endDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}

@@ -79,11 +79,19 @@ export default function TeacherGradingPage() {
 
     if (updated) {
       confetti({ particleCount: 70, spread: 60 });
-      setNotification(`Nilai untuk ${selectedSub.studentName} berhasil disahkan! Bab berikutnya untuk siswa ini telah terbuka.`);
+      const isPassed = Number(teacherScore) >= 75;
+      const isRemedial = selectedSub.attemptNumber === 2;
+      setNotification(
+        isPassed
+          ? `Nilai untuk ${selectedSub.studentName} berhasil disahkan (${teacherScore}/100 - LULUS)! Bab berikutnya untuk siswa ini telah terbuka.`
+          : isRemedial
+          ? `Nilai remedial ${selectedSub.studentName} (${teacherScore}/100) disahkan. Batas kesempatan ujian (2/2) selesai.`
+          : `Nilai ${selectedSub.studentName} (${teacherScore}/100) disahkan. Siswa diberikan 1x kesempatan ujian remedial.`
+      );
       loadSubmissions();
       setSelectedSub(updated);
 
-      setTimeout(() => setNotification(null), 5000);
+      setTimeout(() => setNotification(null), 6000);
     }
   };
 
@@ -127,6 +135,7 @@ export default function TeacherGradingPage() {
               {submissions.map((sub) => {
                 const isSelected = selectedSub?.id === sub.id;
                 const isPending = sub.status === 'pending';
+                const isRemedial = sub.attemptNumber === 2;
                 return (
                   <div
                     key={sub.id}
@@ -139,15 +148,23 @@ export default function TeacherGradingPage() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-sm">{sub.studentName}</span>
-                      <RetroBadge variant={isPending ? 'yellow' : 'green'} size="sm">
-                        {isPending ? 'MENUNGGU' : 'TERVERIFIKASI'}
-                      </RetroBadge>
+                      <div className="flex items-center gap-1">
+                        {isRemedial && (
+                          <span className="px-1.5 py-0.5 bg-purple-200 text-purple-950 font-mono text-[10px] font-bold border border-black">
+                            REMEDIAL
+                          </span>
+                        )}
+                        <RetroBadge variant={isPending ? 'yellow' : 'green'} size="sm">
+                          {isPending ? 'MENUNGGU' : 'TERVERIFIKASI'}
+                        </RetroBadge>
+                      </div>
                     </div>
                     <div className="text-xs font-mono text-zinc-600 mt-1">
                       Skor Rekomendasi: <strong>{sub.autoScore} / 100</strong>
                     </div>
-                    <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
-                      Dikirim: {new Date(sub.submittedAt).toLocaleTimeString('id-ID')}
+                    <div className="text-[10px] font-mono text-zinc-500 mt-0.5 flex items-center justify-between">
+                      <span>Sesi: {isRemedial ? 'Percobaan 2 (Remedial)' : 'Percobaan 1 (Reguler)'}</span>
+                      <span>{new Date(sub.submittedAt).toLocaleTimeString('id-ID')}</span>
                     </div>
                   </div>
                 );
@@ -176,6 +193,16 @@ export default function TeacherGradingPage() {
                   <div>
                     <div className="text-zinc-600">NAMA SISWA:</div>
                     <div className="font-bold text-sm text-black">{selectedSub.studentName}</div>
+                  </div>
+                  <div>
+                    <div className="text-zinc-600">SESI / KESEMPATAN:</div>
+                    <div className="font-bold text-xs">
+                      {selectedSub.attemptNumber === 2 ? (
+                        <span className="text-purple-800 font-black">🔴 UJIAN REMEDIAL (PERCOBAAN 2/2)</span>
+                      ) : (
+                        <span className="text-blue-900 font-black">🔵 PERCOBAAN 1 (REGULER)</span>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <div className="text-zinc-600">STATUS KOREKSI:</div>
@@ -316,8 +343,11 @@ export default function TeacherGradingPage() {
                   </div>
 
                   <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
-                    <span className="text-xs font-mono text-zinc-600">
-                      💡 Mengesahkan nilai &ge; 75 akan otomatis membuka Bab selanjutnya di akun siswa.
+                    <span className="text-xs font-mono text-zinc-600 max-w-lg leading-relaxed">
+                      💡 Nilai &ge; 75 otomatis meluluskan siswa dan membuka Bab berikutnya.
+                      {selectedSub.attemptNumber === 2
+                        ? ' Karena ini Ujian Remedial (Percobaan 2/2), nilai ini akan menjadi nilai akhir permanen.'
+                        : ' Jika nilai < 75, siswa akan otomatis diberikan 1 kali kesempatan ujian remedial.'}
                     </span>
 
                     <RetroButton
