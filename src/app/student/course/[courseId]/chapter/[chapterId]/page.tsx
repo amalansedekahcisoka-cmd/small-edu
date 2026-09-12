@@ -47,14 +47,15 @@ export default function ChapterViewPage() {
   const [assignmentFile, setAssignmentFile] = useState<string>('');
   const [assignmentSubmitted, setAssignmentSubmitted] = useState<boolean>(false);
 
-  const loadData = () => {
+  const loadData = async () => {
     let currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
 
-    const c = DataProvider.getCourseById(courseId);
+    const courses = await DataProvider.getCoursesAsync();
+    const c = courses.find((item) => item.id === courseId) || DataProvider.getCourseById(courseId);
     setCourse(c || null);
 
-    const chs = DataProvider.getChapters(courseId);
+    const chs = await DataProvider.getChaptersAsync(courseId);
     setAllChapters(chs);
 
     const currentCh = chs.find((ch) => ch.id === chapterId);

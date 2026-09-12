@@ -44,7 +44,7 @@ export default function StudentDashboard() {
   const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
   const [selectedBabReport, setSelectedBabReport] = useState<BabLearningReport | null>(null);
 
-  const loadDashboard = () => {
+  const loadDashboard = async () => {
     let currentUser = DataProvider.getCurrentUser();
     if (!currentUser) return;
 
@@ -66,19 +66,29 @@ export default function StudentDashboard() {
       return;
     }
 
-    const allCourses = DataProvider.getCourses();
+    // Ambil daftar kursus terbaru dari Cloud Firestore & cache lokal
+    const allCourses = await DataProvider.getCoursesAsync();
 
-    // Filter course berdasarkan kelas siswa (dengan normalisasi misal X RPL 1 vs 10 RPL 1)
+    // Filter course berdasarkan kelas siswa (dengan normalisasi komprehensif)
     const studentClass = currentUser.gradeClass || '';
     const normalizeClass = (s: string) =>
-      s.toLowerCase().replace(/\s+/g, '').replace(/^10/, 'x').replace(/^11/, 'xi').replace(/^12/, 'xii');
+      s
+        .toLowerCase()
+        .replace(/^kelas\s*/i, '')
+        .replace(/[\s\-_]+/g, '')
+        .replace(/^10/, 'x')
+        .replace(/^11/, 'xi')
+        .replace(/^12/, 'xii');
 
     const myCourses = allCourses.filter((c) => {
-      if (!c.targetClasses || c.targetClasses.length === 0) return true;
+      if (!c.targetClasses || c.targetClasses.length === 0 || c.targetClasses.includes('ALL')) return true;
       if (!studentClass) return true;
       const normStudent = normalizeClass(studentClass);
       return c.targetClasses.some(
-        (tc) => normalizeClass(tc) === normStudent || tc.toLowerCase() === studentClass.toLowerCase()
+        (tc) =>
+          tc === 'ALL' ||
+          normalizeClass(tc) === normStudent ||
+          tc.toLowerCase().trim() === studentClass.toLowerCase().trim()
       );
     });
 
@@ -90,7 +100,7 @@ export default function StudentDashboard() {
     setCourse(primaryCourse);
 
     if (primaryCourse) {
-      const chs = DataProvider.getChapters(primaryCourse.id);
+      const chs = await DataProvider.getChaptersAsync(primaryCourse.id);
       setChapters(chs);
       const prog = DataProvider.getUserProgress(currentUser.id, primaryCourse.id);
       setProgress(prog);
@@ -107,10 +117,10 @@ export default function StudentDashboard() {
     }
   };
 
-  const handleSelectCourse = (selectedCourse: Course) => {
+  const handleSelectCourse = async (selectedCourse: Course) => {
     if (!user) return;
     setCourse(selectedCourse);
-    const chs = DataProvider.getChapters(selectedCourse.id);
+    const chs = await DataProvider.getChaptersAsync(selectedCourse.id);
     setChapters(chs);
     const prog = DataProvider.getUserProgress(user.id, selectedCourse.id);
     setProgress(prog);

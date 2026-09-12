@@ -168,6 +168,7 @@ export class DataProvider {
         this.getUsersAsync(),
         this.getClassesAsync(),
         this.getCoursesAsync(),
+        this.getChaptersAsync(),
         this.getActivityLogsAsync(),
         this.getSubmissionsAsync(),
         this.syncAllProgressAsync(),
@@ -537,9 +538,31 @@ export class DataProvider {
   }
 
   static async getCoursesAsync(): Promise<Course[]> {
+    if (isFirebaseConfigured) {
+      try {
+        const firestoreCourses = await FirestoreService.getCourses();
+        if (Array.isArray(firestoreCourses) && firestoreCourses.length > 0) {
+          const map = new Map<string, Course>();
+          MOCK_COURSES.forEach((c) => map.set(c.id, c));
+          const localCourses = safeGetItem<Course[]>(STORAGE_KEYS.COURSES, []);
+          localCourses.forEach((c) => map.set(c.id, c));
+          firestoreCourses.forEach((c) => {
+            if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
+          });
+          const merged = Array.from(map.values());
+          safeSetItem(STORAGE_KEYS.COURSES, merged);
+          return merged;
+        }
+      } catch (e) {
+        console.warn('Firestore getCourses error in DataProvider:', e);
+      }
+    }
+
     const serverData = await fetchServerData();
     if (serverData?.courses && Array.isArray(serverData.courses) && serverData.courses.length > 0) {
-      return serverData.courses as Course[];
+      const merged = serverData.courses as Course[];
+      safeSetItem(STORAGE_KEYS.COURSES, merged);
+      return merged;
     }
     return this.getCourses();
   }
@@ -620,6 +643,37 @@ export class DataProvider {
   }
 
   static async getChaptersAsync(courseId?: string): Promise<Chapter[]> {
+    if (isFirebaseConfigured) {
+      try {
+        if (courseId) {
+          const chs = await FirestoreService.getChapters(courseId);
+          if (Array.isArray(chs) && chs.length > 0) {
+            const allLocal = this.getChapters();
+            const otherChapters = allLocal.filter((c) => c.courseId !== courseId);
+            const map = new Map<string, Chapter>();
+            otherChapters.forEach((c) => map.set(c.id, c));
+            chs.forEach((c) => map.set(c.id, c));
+            const merged = Array.from(map.values()).sort((a, b) => a.order_index - b.order_index);
+            safeSetItem(STORAGE_KEYS.CHAPTERS, merged);
+            return chs.sort((a, b) => a.order_index - b.order_index);
+          }
+        } else {
+          const allChs = await FirestoreService.getAllChapters();
+          if (Array.isArray(allChs) && allChs.length > 0) {
+            const map = new Map<string, Chapter>();
+            const allLocal = this.getChapters();
+            allLocal.forEach((c) => map.set(c.id, c));
+            allChs.forEach((c) => map.set(c.id, c));
+            const merged = Array.from(map.values()).sort((a, b) => a.order_index - b.order_index);
+            safeSetItem(STORAGE_KEYS.CHAPTERS, merged);
+            return merged;
+          }
+        }
+      } catch (e) {
+        console.warn('Firestore getChapters error in DataProvider:', e);
+      }
+    }
+
     const serverData = await fetchServerData();
     const all = serverData?.chapters && Array.isArray(serverData.chapters) ? (serverData.chapters as Chapter[]) : this.getChapters();
     if (!courseId) return all.sort((a, b) => a.order_index - b.order_index);

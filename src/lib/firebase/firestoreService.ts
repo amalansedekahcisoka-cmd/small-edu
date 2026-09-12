@@ -192,6 +192,19 @@ export const FirestoreService = {
     }
   },
 
+  async getAllChapters(): Promise<Chapter[]> {
+    try {
+      const courses = await this.getCourses();
+      if (!courses || courses.length === 0) return [];
+      const chapterPromises = courses.map((c) => this.getChapters(c.id));
+      const chapterArrays = await Promise.all(chapterPromises);
+      return chapterArrays.flat();
+    } catch (e) {
+      console.warn('Fallback: could not fetch all chapters from Firestore', e);
+      return [];
+    }
+  },
+
   async saveChapter(courseId: string, chapter: Chapter): Promise<void> {
     try {
       const ref = doc(db, 'courses', courseId, 'chapters', chapter.id);

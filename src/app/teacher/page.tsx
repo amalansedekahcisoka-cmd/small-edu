@@ -138,6 +138,9 @@ export default function TeacherDashboard() {
       setSelectedCourse(currentC);
       const chs = DataProvider.getChapters(currentC.id);
       setChapters(chs);
+      DataProvider.getChaptersAsync(currentC.id).then((asyncChs) => {
+        if (asyncChs && asyncChs.length > 0) setChapters(asyncChs);
+      }).catch(console.error);
     } else {
       setSelectedCourse(null);
       setChapters([]);
@@ -196,6 +199,9 @@ export default function TeacherDashboard() {
   const handleSelectCourse = (c: Course) => {
     setSelectedCourse(c);
     setChapters(DataProvider.getChapters(c.id));
+    DataProvider.getChaptersAsync(c.id).then((chs) => {
+      if (chs && chs.length > 0) setChapters(chs);
+    }).catch(console.error);
   };
 
   // Strukturkan materi-materi ke dalam hierarki buku: BAB -> Sub-Bab -> Tugas
