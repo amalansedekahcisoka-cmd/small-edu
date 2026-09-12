@@ -657,7 +657,7 @@ export class DataProvider {
     return courses.find((c) => c.id === courseId);
   }
 
-  static addCourse(newCourse: Omit<Course, 'id'>): Course {
+  static async addCourse(newCourse: Omit<Course, 'id'>): Promise<Course> {
     const courses = this.getCourses();
     const created: Course = {
       ...newCourse,
@@ -666,11 +666,13 @@ export class DataProvider {
     courses.push(created);
     safeSetItem(STORAGE_KEYS.COURSES, courses);
     postServerAction('ADD_COURSE', created);
-    FirestoreService.saveCourse(created).catch(console.error);
+    if (isFirebaseConfigured) {
+      await FirestoreService.saveCourse(created).catch(console.error);
+    }
     return created;
   }
 
-  static updateCourse(courseId: string, updates: Partial<Course>): void {
+  static async updateCourse(courseId: string, updates: Partial<Course>): Promise<void> {
     const courses = this.getCourses().map((c) => {
       if (c.id === courseId) {
         return { ...c, ...updates };
@@ -680,8 +682,8 @@ export class DataProvider {
     safeSetItem(STORAGE_KEYS.COURSES, courses);
     postServerAction('UPDATE_COURSE', { courseId, updates });
     const target = courses.find((c) => c.id === courseId);
-    if (target) {
-      FirestoreService.saveCourse(target).catch(console.error);
+    if (target && isFirebaseConfigured) {
+      await FirestoreService.saveCourse(target).catch(console.error);
     }
   }
 
@@ -740,13 +742,17 @@ export class DataProvider {
           const chs = await FirestoreService.getChapters(courseId);
           if (Array.isArray(chs)) {
             const allLocal = this.getChapters();
-            const otherChapters = allLocal.filter((c) => c.courseId !== courseId);
             const map = new Map<string, Chapter>();
-            otherChapters.forEach((c) => map.set(c.id, c));
-            chs.forEach((c) => map.set(c.id, c));
-            const merged = Array.from(map.values()).sort((a, b) => a.order_index - b.order_index);
-            safeSetItem(STORAGE_KEYS.CHAPTERS, merged);
-            return chs.sort((a, b) => a.order_index - b.order_index);
+            // 1. Simpan bab lokal kursus ini (agar materi yang baru ditambahkan tidak hilang saat sync in-flight)
+            allLocal.filter((c) => c.courseId === courseId).forEach((c) => map.set(c.id, c));
+            // 2. Timpa / tambahkan dari Firestore
+            chs.forEach((c) => {
+              if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
+            });
+            const mergedThisCourse = Array.from(map.values()).sort((a, b) => a.order_index - b.order_index);
+            const otherChapters = allLocal.filter((c) => c.courseId !== courseId);
+            safeSetItem(STORAGE_KEYS.CHAPTERS, [...otherChapters, ...mergedThisCourse]);
+            return mergedThisCourse;
           }
         } else {
           const allChs = await FirestoreService.getAllChapters();
@@ -754,7 +760,9 @@ export class DataProvider {
             const map = new Map<string, Chapter>();
             const allLocal = this.getChapters();
             allLocal.forEach((c) => map.set(c.id, c));
-            allChs.forEach((c) => map.set(c.id, c));
+            allChs.forEach((c) => {
+              if (c && c.id) map.set(c.id, { ...map.get(c.id), ...c });
+            });
             const merged = Array.from(map.values()).sort((a, b) => a.order_index - b.order_index);
             safeSetItem(STORAGE_KEYS.CHAPTERS, merged);
             return merged;
@@ -778,7 +786,7 @@ export class DataProvider {
     return chapters.find((ch) => ch.id === chapterId);
   }
 
-  static addChapter(newChapter: Omit<Chapter, 'id'>): Chapter {
+  static async addChapter(newChapter: Omit<Chapter, 'id'>): Promise<Chapter> {
     const chapters = this.getChapters();
     const created: Chapter = {
       ...newChapter,
@@ -791,16 +799,18 @@ export class DataProvider {
     // Update jumlah bab di kursus
     const course = this.getCourseById(newChapter.courseId);
     if (course) {
-      this.updateCourse(course.id, {
+      await this.updateCourse(course.id, {
         chaptersCount: this.getChapters(course.id).length,
       });
     }
 
-    FirestoreService.saveChapter(newChapter.courseId, created).catch(console.error);
+    if (isFirebaseConfigured) {
+      await FirestoreService.saveChapter(newChapter.courseId, created).catch(console.error);
+    }
     return created;
   }
 
-  static updateChapter(chapterId: string, updates: Partial<Chapter>): void {
+  static async updateChapter(chapterId: string, updates: Partial<Chapter>): Promise<void> {
     const chapters = this.getChapters().map((ch) => {
       if (ch.id === chapterId) {
         return { ...ch, ...updates };
@@ -811,8 +821,8 @@ export class DataProvider {
     postServerAction('UPDATE_CHAPTER', { chapterId, updates });
 
     const target = chapters.find((ch) => ch.id === chapterId);
-    if (target) {
-      FirestoreService.updateChapter(target.courseId, chapterId, updates).catch(console.error);
+    if (target && isFirebaseConfigured) {
+      await FirestoreService.updateChapter(target.courseId, chapterId, updates).catch(console.error);
     }
   }
 

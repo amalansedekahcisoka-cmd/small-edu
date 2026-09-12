@@ -451,9 +451,16 @@ export default function TeacherDashboard() {
   };
 
   // Simpan Bab Baru atau Perbarui Bab
-  const handleSaveChapter = (e: React.FormEvent) => {
+  const handleSaveChapter = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCourse || !title.trim()) return;
+    if (!selectedCourse) {
+      alert('Pilih mata pelajaran terlebih dahulu sebelum menyimpan materi.');
+      return;
+    }
+    if (!title.trim()) {
+      alert('Judul materi wajib diisi.');
+      return;
+    }
 
     const nextOrder = editingChapterId
       ? orderIndex
@@ -461,11 +468,25 @@ export default function TeacherDashboard() {
       ? Math.max(...chapters.map((c) => c.order_index)) + 1
       : 1;
 
+    // Normalisasi URL agar aman jika pengguna tidak mengetik https://
+    const formatUrl = (url: string) => {
+      const trimmed = url.trim();
+      if (!trimmed) return '';
+      if (!/^https?:\/\//i.test(trimmed) && !trimmed.startsWith('/')) {
+        return `https://${trimmed}`;
+      }
+      return trimmed;
+    };
+
+    const formattedFileUrl = chapterType === 'pdf' ? formatUrl(fileUrl) : undefined;
+    const formattedExternalUrl = chapterType === 'link' ? formatUrl(externalUrl) : undefined;
+    const formattedVideoUrl = chapterType === 'video' ? formatUrl(videoUrl) : undefined;
+
     const scheduleData = scheduleEnabled
       ? {
           isEnabled: true,
-          startDate: scheduleStartDate ? new Date(scheduleStartDate).toISOString() : undefined,
-          endDate: scheduleEndDate ? new Date(scheduleEndDate).toISOString() : undefined,
+          ...(scheduleStartDate ? { startDate: new Date(scheduleStartDate).toISOString() } : {}),
+          ...(scheduleEndDate ? { endDate: new Date(scheduleEndDate).toISOString() } : {}),
         }
       : undefined;
 
@@ -478,32 +499,37 @@ export default function TeacherDashboard() {
       passing_grade: Number(passingGrade),
       babNumber: Number(babNumberInput),
       babTitle: babTitleInput.trim() || `BAB ${babNumberInput}`,
-      subChapterNumber: subChapterNumInput.trim() || undefined,
+      ...(subChapterNumInput.trim() ? { subChapterNumber: subChapterNumInput.trim() } : {}),
       itemCategory: itemCategoryInput,
-      parentSubChapterId: targetSubChapterId || undefined,
-      textContent: chapterType === 'text' ? textContent.trim() : undefined,
-      fileUrl: chapterType === 'pdf' ? fileUrl.trim() : undefined,
-      externalUrl: chapterType === 'link' ? externalUrl.trim() : undefined,
-      videoUrl: chapterType === 'video' ? videoUrl.trim() : undefined,
-      assignmentPrompt: chapterType === 'assignment' ? assignmentPrompt.trim() : undefined,
-      activityRewardPoints: activityRewardPoints.trim() ? Math.max(1, Number(activityRewardPoints)) : undefined,
-      schedule: scheduleData,
-      questions: questionsInput.length > 0 ? questionsInput : undefined,
+      ...(targetSubChapterId ? { parentSubChapterId: targetSubChapterId } : {}),
+      ...(chapterType === 'text' && textContent.trim() ? { textContent: textContent.trim() } : {}),
+      ...(formattedFileUrl ? { fileUrl: formattedFileUrl } : {}),
+      ...(formattedExternalUrl ? { externalUrl: formattedExternalUrl } : {}),
+      ...(formattedVideoUrl ? { videoUrl: formattedVideoUrl } : {}),
+      ...(chapterType === 'assignment' && assignmentPrompt.trim() ? { assignmentPrompt: assignmentPrompt.trim() } : {}),
+      ...(activityRewardPoints.trim() ? { activityRewardPoints: Math.max(1, Number(activityRewardPoints)) } : {}),
+      ...(scheduleData ? { schedule: scheduleData } : {}),
+      ...(questionsInput.length > 0 ? { questions: questionsInput } : {}),
     };
 
-    if (editingChapterId) {
-      // Update
-      DataProvider.updateChapter(editingChapterId, chapterPayload);
-      setNotification(`Materi "${title.trim()}" berhasil diperbarui!`);
-    } else {
-      // Tambah Baru
-      DataProvider.addChapter(chapterPayload);
-      setNotification(`Berhasil menambahkan "${title.trim()}" ke dalam ${babTitleInput}!`);
-    }
+    try {
+      if (editingChapterId) {
+        // Update
+        await DataProvider.updateChapter(editingChapterId, chapterPayload);
+        setNotification(`Materi "${title.trim()}" berhasil diperbarui!`);
+      } else {
+        // Tambah Baru
+        await DataProvider.addChapter(chapterPayload);
+        setNotification(`Berhasil menambahkan "${title.trim()}" ke dalam ${babTitleInput}!`);
+      }
 
-    setIsModalOpen(false);
-    loadData();
-    setTimeout(() => setNotification(null), 5000);
+      setIsModalOpen(false);
+      loadData();
+      setTimeout(() => setNotification(null), 5000);
+    } catch (err: any) {
+      console.error('Error saving chapter:', err);
+      alert('Gagal menyimpan materi: ' + (err?.message || 'Terjadi kesalahan sistem'));
+    }
   };
 
   // Hapus Bab
@@ -535,7 +561,7 @@ export default function TeacherDashboard() {
   };
 
   // Tambah Kursus Baru
-  const handleCreateCourse = (e: React.FormEvent) => {
+  const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCourseTitle.trim() || !newCourseSubject.trim()) return;
     if (newCourseTargetClasses.length === 0) {
@@ -543,27 +569,32 @@ export default function TeacherDashboard() {
       return;
     }
 
-    const created = DataProvider.addCourse({
-      title: newCourseTitle.trim(),
-      subject: newCourseSubject.trim(),
-      gradeLevel: newCourseGrade,
-      description: newCourseDesc.trim() || 'Mata pelajaran pembelajaran mandiri berurutan.',
-      thumbnailBg: '#FFE169',
-      teacherId: user?.id || 'user-teacher-rudiansyah',
-      teacherName: user?.name || 'Guru',
-      chaptersCount: 0,
-      isPublished: true,
-      targetClasses: newCourseTargetClasses,
-    });
+    try {
+      const created = await DataProvider.addCourse({
+        title: newCourseTitle.trim(),
+        subject: newCourseSubject.trim(),
+        gradeLevel: newCourseGrade,
+        description: newCourseDesc.trim() || 'Mata pelajaran pembelajaran mandiri berurutan.',
+        thumbnailBg: '#FFE169',
+        teacherId: user?.id || 'teacher',
+        teacherName: user?.name || 'Guru',
+        chaptersCount: 0,
+        isPublished: true,
+        targetClasses: newCourseTargetClasses,
+      });
 
-    setNotification(`Mata pelajaran "${created.title}" berhasil dibuat untuk kelas: ${newCourseTargetClasses.join(', ')}!`);
-    setIsCourseModalOpen(false);
-    setNewCourseTitle('');
-    setNewCourseSubject('');
-    setNewCourseDesc('');
-    setNewCourseTargetClasses([]);
-    loadData(created);
-    setTimeout(() => setNotification(null), 6000);
+      setNotification(`Mata pelajaran "${created.title}" berhasil dibuat untuk kelas: ${newCourseTargetClasses.join(', ')}!`);
+      setIsCourseModalOpen(false);
+      setNewCourseTitle('');
+      setNewCourseSubject('');
+      setNewCourseDesc('');
+      setNewCourseTargetClasses([]);
+      loadData(created);
+      setTimeout(() => setNotification(null), 6000);
+    } catch (err: any) {
+      console.error('Error creating course:', err);
+      alert('Gagal membuat mata pelajaran: ' + (err?.message || 'Terjadi kesalahan sistem'));
+    }
   };
 
   if (isAuthLoading || !isAuthorized || !user) {
@@ -1407,7 +1438,7 @@ export default function TeacherDashboard() {
                       <div className="space-y-1.5">
                         <label className="block font-bold">Tautan URL Berkas Dokumen PDF Materi:</label>
                         <input
-                          type="url"
+                          type="text"
                           required
                           placeholder="https://drive.google.com/... atau tautan file PDF publik..."
                           value={fileUrl}
@@ -1424,7 +1455,7 @@ export default function TeacherDashboard() {
                       <div className="space-y-1.5">
                         <label className="block font-bold">Tautan URL Video YouTube Pembelajaran:</label>
                         <input
-                          type="url"
+                          type="text"
                           required
                           placeholder="https://www.youtube.com/watch?v=... atau https://youtu.be/..."
                           value={videoUrl}
@@ -1438,7 +1469,7 @@ export default function TeacherDashboard() {
                       <div className="space-y-1.5">
                         <label className="block font-bold">Tautan URL Eksternal / Referensi Web / Form / Sheet:</label>
                         <input
-                          type="url"
+                          type="text"
                           required
                           placeholder="https://docs.google.com/spreadsheets/... atau link referensi..."
                           value={externalUrl}

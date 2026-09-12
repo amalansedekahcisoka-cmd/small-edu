@@ -15,6 +15,11 @@ import {
 import { db, isFirebaseConfigured } from './client';
 import { User, Course, Chapter, Submission, UserCourseProgress, ActivityLog, ClassRoom } from '@/types';
 
+function sanitizeForFirestore<T>(data: T): T {
+  if (!data || typeof data !== 'object') return data;
+  return JSON.parse(JSON.stringify(data));
+}
+
 export const FirestoreService = {
   /**
    * Cek koneksi ke Firebase Firestore
@@ -48,7 +53,7 @@ export const FirestoreService = {
   async saveUser(user: User): Promise<void> {
     try {
       const userRef = doc(db, 'users', user.id);
-      await setDoc(userRef, user, { merge: true });
+      await setDoc(userRef, sanitizeForFirestore(user), { merge: true });
     } catch (e) {
       console.error('Error saving user to Firestore', e);
     }
@@ -57,7 +62,7 @@ export const FirestoreService = {
   async updateUser(userId: string, updates: Partial<User>): Promise<void> {
     try {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, updates);
+      await updateDoc(userRef, sanitizeForFirestore(updates));
     } catch (e) {
       console.error('Error updating user in Firestore', e);
     }
@@ -129,7 +134,7 @@ export const FirestoreService = {
   async saveClass(c: ClassRoom): Promise<void> {
     try {
       const ref = doc(db, 'classes', c.id);
-      await setDoc(ref, c, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(c), { merge: true });
     } catch (e) {
       console.error('Error saving class to Firestore', e);
     }
@@ -138,7 +143,7 @@ export const FirestoreService = {
   async updateClass(classId: string, updates: Partial<ClassRoom>): Promise<void> {
     try {
       const ref = doc(db, 'classes', classId);
-      await updateDoc(ref, updates);
+      await updateDoc(ref, sanitizeForFirestore(updates));
     } catch (e) {
       console.error('Error updating class in Firestore', e);
     }
@@ -201,7 +206,7 @@ export const FirestoreService = {
   async saveCourse(course: Course): Promise<void> {
     try {
       const ref = doc(db, 'courses', course.id);
-      await setDoc(ref, course, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(course), { merge: true });
     } catch (e) {
       console.error('Error saving course to Firestore', e);
     }
@@ -276,7 +281,7 @@ export const FirestoreService = {
   async saveChapter(courseId: string, chapter: Chapter): Promise<void> {
     try {
       const ref = doc(db, 'courses', courseId, 'chapters', chapter.id);
-      await setDoc(ref, chapter, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(chapter), { merge: true });
     } catch (e) {
       console.error('Error saving chapter to Firestore', e);
     }
@@ -285,7 +290,7 @@ export const FirestoreService = {
   async updateChapter(courseId: string, chapterId: string, updates: Partial<Chapter>): Promise<void> {
     try {
       const ref = doc(db, 'courses', courseId, 'chapters', chapterId);
-      await updateDoc(ref, updates);
+      await updateDoc(ref, sanitizeForFirestore(updates));
     } catch (e) {
       console.error('Error updating chapter in Firestore', e);
     }
@@ -331,7 +336,7 @@ export const FirestoreService = {
     try {
       const key = `${progress.userId}_${progress.courseId}`;
       const ref = doc(db, 'user_progress', key);
-      await setDoc(ref, progress, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(progress), { merge: true });
     } catch (e) {
       console.error('Error saving progress to Firestore', e);
     }
@@ -352,7 +357,7 @@ export const FirestoreService = {
   async saveSubmission(submission: Submission): Promise<void> {
     try {
       const ref = doc(db, 'submissions', submission.id);
-      await setDoc(ref, submission, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(submission), { merge: true });
     } catch (e) {
       console.error('Error saving submission to Firestore', e);
     }
@@ -383,7 +388,7 @@ export const FirestoreService = {
   async saveActivityLog(log: ActivityLog): Promise<void> {
     try {
       const ref = doc(db, 'activity_logs', log.id);
-      await setDoc(ref, log, { merge: true });
+      await setDoc(ref, sanitizeForFirestore(log), { merge: true });
     } catch (e) {
       console.error('Error saving activity log to Firestore', e);
     }
