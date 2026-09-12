@@ -367,7 +367,9 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
     const isPending = submissionResult.status === 'pending';
     const passingScore = chapter.passing_grade ?? 75;
     const finalScore = submissionResult.finalScore ?? 0;
-    const isPassed = finalScore >= passingScore;
+    const isPurePassed = finalScore >= passingScore;
+    const isTeacherGrace = !!submissionResult.teacherGrace;
+    const isPassed = isPurePassed || isTeacherGrace;
     const currentAttempt = submissionResult.attemptNumber || attemptNumber || 1;
     const canRemedial = !isPassed && currentAttempt < 2;
     const p5 = getP5ProgressInfo(finalScore);
@@ -384,6 +386,8 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             className={`p-6 neo-border text-center space-y-3 ${
               isPending
                 ? 'bg-[#fffde6]'
+                : isTeacherGrace
+                ? 'bg-[#eefaf3]'
                 : isPassed
                 ? 'bg-[#ecfbf3]'
                 : canRemedial
@@ -394,6 +398,8 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             <h2 className="text-xl font-black text-black">
               {isPending
                 ? '📝 JAWABAN BERHASIL DIKIRIM (MENUNGGU VERIFIKASI GURU)'
+                : isTeacherGrace
+                ? '🤝 TUNTAS BELAJAR (DISPENSASI / KEBIJAKSANAAN GURU)'
                 : isPassed
                 ? '🎉 KETUNTASAN BELAJAR TERCAPAI (LULUS)'
                 : canRemedial
@@ -427,12 +433,18 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
               {!isPending && (
                 <span
                   className={`px-3 py-1 neo-border-sm font-black ${
-                    isPassed
+                    isTeacherGrace
+                      ? 'bg-teal-200 text-teal-950 border border-teal-600'
+                      : isPassed
                       ? 'bg-emerald-300 text-emerald-950'
                       : 'bg-red-200 text-red-950'
                   }`}
                 >
-                  {isPassed ? 'TUNTAS BELAJAR' : 'BELUM TUNTAS'}
+                  {isTeacherGrace
+                    ? 'TUNTAS (KEBIJAKSANAAN GURU)'
+                    : isPassed
+                    ? 'TUNTAS BELAJAR'
+                    : 'BELUM TUNTAS'}
                 </span>
               )}
             </div>
@@ -440,6 +452,8 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             <p className="font-mono text-xs sm:text-sm max-w-xl mx-auto text-zinc-700 leading-relaxed pt-1">
               {isPending
                 ? 'Soal essay uraian telah tersimpan dan dianalisis kata kuncinya oleh sistem. Menunggu konfirmasi dan pengesahan nilai akhir dari Guru Pengampu.'
+                : isTeacherGrace
+                ? 'Guru Pengampu telah menyetujui ketuntasan belajar Anda untuk bab ini berdasarkan pertimbangan keaktifan di kelas. Remedial tidak perlu ditempuh dan materi Bab selanjutnya sudah terbuka untuk dipelajari!'
                 : isPassed
                 ? p5.encouragement
                 : canRemedial
@@ -460,17 +474,21 @@ export const ExamRunner: React.FC<ExamRunnerProps> = ({
             </div>
           )}
 
-          {/* KOTAK INFORMASI JIKA TUNTAS PADA PERCOBAAN 1 (REMEDIAL TERKUNCI) */}
+          {/* KOTAK INFORMASI JIKA TUNTAS (MURNI ATAU KEBIJAKSANAAN GURU) */}
           {!isPending && isPassed && (
             <div className="bg-[#eefaf3] neo-border p-5 text-center space-y-2">
               <div className="inline-block px-3 py-1 bg-emerald-700 text-white font-mono font-black text-xs neo-border-sm">
-                KETUNTASAN BELAJAR TERCAPAI
+                {isTeacherGrace ? 'DISPENSASI KELULUSAN DARI GURU' : 'KETUNTASAN BELAJAR TERCAPAI'}
               </div>
               <h3 className="font-black text-lg text-emerald-950">
-                Selamat! Anda Telah Tuntas pada Percobaan Pertama
+                {isTeacherGrace
+                  ? 'Selamat! Bab Ini Dinyatakan Tuntas oleh Guru'
+                  : 'Selamat! Anda Telah Tuntas Belajar'}
               </h3>
               <p className="font-mono text-xs text-emerald-800 max-w-lg mx-auto leading-relaxed">
-                Karena nilai Anda sudah mencapai Target Ketuntasan Belajar, Ujian Remedial <strong>otomatis terkunci</strong> dan tidak perlu ditempuh. Anda dapat langsung melanjutkan ke materi pembelajaran berikutnya!
+                {isTeacherGrace
+                  ? 'Ujian Remedial otomatis terkunci. Bonus XP (30 XP) hanya diberikan untuk pencapaian target murni, namun bab berikutnya sudah dapat Anda pelajari.'
+                  : 'Karena nilai Anda sudah mencapai Target Ketuntasan Belajar, Ujian Remedial otomatis terkunci dan Anda berhak langsung melanjutkan ke materi pembelajaran berikutnya!'}
               </p>
             </div>
           )}

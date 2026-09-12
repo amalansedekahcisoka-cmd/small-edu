@@ -415,8 +415,10 @@ export default function StudentDashboard() {
                                             </span>
 
                                             {isCompleted && (
-                                              <RetroBadge variant="green" size="sm" icon={<CheckCircle2 className="w-3 h-3" />}>
-                                                SELESAI (SKOR: {score ?? 100})
+                                              <RetroBadge variant={chProg?.teacherGrace ? 'teal' : 'green'} size="sm" icon={<CheckCircle2 className="w-3 h-3" />}>
+                                                {chProg?.teacherGrace
+                                                  ? `TUNTAS (DISPENSASI GURU: ${score ?? 0})`
+                                                  : `SELESAI (SKOR: ${score ?? 100})`}
                                               </RetroBadge>
                                             )}
 

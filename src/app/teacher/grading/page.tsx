@@ -33,6 +33,7 @@ export default function TeacherGradingPage() {
   const [user, setUser] = useState<User | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'pending' | 'graded' | 'all'>('pending');
+  const [giveTeacherGrace, setGiveTeacherGrace] = useState<boolean>(false);
 
   useEffect(() => {
     setMounted(true);
@@ -66,8 +67,10 @@ export default function TeacherGradingPage() {
       setSelectedSub(visibleSubs[0]);
       setTeacherScore(visibleSubs[0].finalScore || visibleSubs[0].autoScore || 85);
       setFeedback(visibleSubs[0].teacherFeedback || 'Jawaban relevan dan memenuhi indikator penilaian.');
+      setGiveTeacherGrace(visibleSubs[0].teacherGrace || false);
     } else if (visibleSubs.length === 0) {
       setSelectedSub(null);
+      setGiveTeacherGrace(false);
     }
   };
 
@@ -79,26 +82,32 @@ export default function TeacherGradingPage() {
     setSelectedSub(sub);
     setTeacherScore(sub.finalScore || 85);
     setFeedback(sub.teacherFeedback || 'Jawaban relevan dan memenuhi indikator penilaian.');
+    setGiveTeacherGrace(sub.teacherGrace || false);
   };
 
   const handleApprove = async () => {
     if (!selectedSub || !user) return;
+
+    const isScorePassed = Number(teacherScore) >= 75;
+    const effectiveGrace = !isScorePassed && giveTeacherGrace;
 
     const updated = await DataProvider.approveSubmissionAsync(
       selectedSub.id,
       Number(teacherScore),
       feedback,
       user.name,
-      selectedSub
+      selectedSub,
+      effectiveGrace
     );
 
     if (updated) {
       confetti({ particleCount: 70, spread: 60 });
-      const isPassed = Number(teacherScore) >= 75;
       const isRemedial = selectedSub.attemptNumber === 2;
       setNotification(
-        isPassed
-          ? `Nilai untuk ${selectedSub.studentName} berhasil disahkan (${teacherScore}/100 - TUNTAS)! Bab berikutnya untuk siswa ini telah terbuka.`
+        isScorePassed
+          ? `Nilai untuk ${selectedSub.studentName} berhasil disahkan (${teacherScore}/100 - TUNTAS MURNI + BONUS XP)! Bab berikutnya untuk siswa ini telah terbuka.`
+          : effectiveGrace
+          ? `Kebijaksanaan Guru diberikan untuk ${selectedSub.studentName} (${teacherScore}/100 - TUNTAS). Bab berikutnya telah terbuka tanpa bonus XP.`
           : isRemedial
           ? `Nilai remedial ${selectedSub.studentName} (${teacherScore}/100) disahkan. Batas kesempatan ujian (2/2) selesai. Bab berikutnya telah terbuka.`
           : `Nilai ${selectedSub.studentName} (${teacherScore}/100) disahkan. Siswa diberikan 1x kesempatan ujian remedial, dan bab berikutnya telah terbuka.`
@@ -531,20 +540,59 @@ export default function TeacherGradingPage() {
                     </div>
                   </div>
 
+                  {/* OPSI KEBIJAKSANAAN GURU: Tampil jika skor siswa < 75 */}
+                  {Number(teacherScore) < 75 && (
+                    <div className="p-3 bg-[#eefaf3] border-2 border-emerald-600 neo-border-sm space-y-2">
+                      <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={giveTeacherGrace}
+                          onChange={(e) => setGiveTeacherGrace(e.target.checked)}
+                          className="mt-0.5 w-4 h-4 text-emerald-600 border-black rounded-none focus:ring-0 cursor-pointer"
+                        />
+                        <div className="font-mono text-xs">
+                          <span className="font-black text-emerald-950 flex items-center gap-1.5">
+                            <span>🤝</span>
+                            <span>Beri Kebijaksanaan Guru (Luluskan Bab Tanpa Bonus XP)</span>
+                          </span>
+                          <p className="text-[11px] text-emerald-800 leading-relaxed mt-0.5">
+                            Centang opsi ini jika Anda ingin meluluskan siswa ini pada bab ini berdasarkan pertimbangan keaktifan.
+                            Siswa akan dinyatakan <strong>Tuntas Belajar</strong> dan Bab berikutnya otomatis terbuka tanpa perlu remedial, namun <strong>Bonus XP (30 XP) tidak akan diberikan</strong> (0 XP).
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
                   <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
                     <span className="text-xs font-mono text-zinc-600 max-w-lg leading-relaxed">
-                      💡 Nilai &ge; 75 otomatis meluluskan siswa dan membuka Bab berikutnya.
-                      {selectedSub.attemptNumber === 2
-                        ? ' Karena ini Ujian Remedial (Percobaan 2/2), nilai ini akan menjadi nilai akhir permanen.'
-                        : ' Jika nilai < 75, siswa akan otomatis diberikan 1 kali kesempatan ujian remedial.'}
+                      {Number(teacherScore) >= 75 ? (
+                        <span className="text-emerald-800 font-bold">
+                          ✓ Nilai memenuhi target ketuntasan belajar (&ge; 75). Siswa lulus murni dan berhak mendapatkan bonus XP.
+                        </span>
+                      ) : giveTeacherGrace ? (
+                        <span className="text-teal-900 font-bold">
+                          🤝 Kebijaksanaan Guru Aktif: Siswa dinyatakan tuntas kurikulum, remedial dikunci, dan tidak ada bonus XP.
+                        </span>
+                      ) : selectedSub.attemptNumber === 2 ? (
+                        <span>
+                          ⚠️ Karena ini Ujian Remedial (Percobaan 2/2), nilai ini akan menjadi nilai akhir permanen di rapor.
+                        </span>
+                      ) : (
+                        <span>
+                          💡 Nilai &lt; 75: Siswa otomatis diberikan 1 kali kesempatan ujian remedial.
+                        </span>
+                      )}
                     </span>
 
                     <RetroButton
-                      variant="yellow"
+                      variant={giveTeacherGrace ? 'teal' : 'yellow'}
                       onClick={handleApprove}
                       icon={<CheckCircle2 className="w-4 h-4 text-emerald-800" />}
                     >
-                      Sahkan & Setujui Nilai Siswa
+                      {giveTeacherGrace
+                        ? 'Sahkan Tuntas (Kebijaksanaan Guru)'
+                        : 'Sahkan & Setujui Nilai Siswa'}
                     </RetroButton>
                   </div>
                 </div>

@@ -992,7 +992,8 @@ export class DataProvider {
     finalScore: number,
     feedback: string,
     teacherName: string,
-    fallbackSub?: Submission
+    fallbackSub?: Submission,
+    teacherGrace: boolean = false
   ): Promise<Submission | null> {
     let subs = this.getSubmissions();
     let index = subs.findIndex((s) => s.id === submissionId);
@@ -1025,6 +1026,7 @@ export class DataProvider {
       gradedBy: teacherName,
       gradedAt: new Date().toISOString(),
       status: 'graded',
+      teacherGrace: teacherGrace || false,
     };
     subs[index] = updated;
     safeSetItem(STORAGE_KEYS.SUBMISSIONS, subs);
@@ -1037,11 +1039,13 @@ export class DataProvider {
     const chapters = await this.getChaptersAsync(target.courseId);
     const chapter = chapters.find((c) => c.id === target.chapterId);
     const passingGrade = chapter?.passing_grade ?? 75;
-    const isPassed = finalScore >= passingGrade;
+    const isPurePassed = finalScore >= passingGrade;
+    const isEffectivePassed = isPurePassed || teacherGrace;
 
     const currentAttempt = target.attemptNumber || 1;
     const maxAttempts = 2;
-    const remedialAllowed = !isPassed && currentAttempt < maxAttempts;
+    // Jika tuntas (murni ataupun karena kebijaksanaan guru), remedial tidak diperbolehkan
+    const remedialAllowed = !isEffectivePassed && currentAttempt < maxAttempts;
 
     // Ambil progres siswa riil dari Firestore (bukan dari cache guru)
     let studentProgress = await this.getUserProgressAsync(target.studentId, target.courseId);
@@ -1060,11 +1064,12 @@ export class DataProvider {
       ...existingCh,
       is_completed: true, // Bab ditandai selesai dipelajari/dikerjakan
       score: finalScore,
-      status: isPassed ? 'passed' : 'failed',
+      status: isEffectivePassed ? 'passed' : 'failed',
       attemptCount: currentAttempt,
       maxAttempts,
       remedialAllowed,
       teacherFeedback: feedback,
+      teacherGrace: teacherGrace || false,
       lastAttemptAt: new Date().toISOString(),
     };
 
@@ -1093,18 +1098,26 @@ export class DataProvider {
       await FirestoreService.saveUserProgress(studentProgress).catch(console.error);
     }
 
+    const statusLabel = isPurePassed
+      ? 'Tuntas'
+      : teacherGrace
+      ? 'Tuntas (Kebijaksanaan Guru)'
+      : currentAttempt < 2
+      ? 'Belum Tuntas / Remedial Tersedia'
+      : 'Belum Tuntas / Kesempatan Habis';
+
     this.logActivity(
       target.studentId,
       target.studentName,
       'student',
-      'SUBMISSION_GRADED',
-      `Tugas/Kuis ${chapter?.title || ''} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (Standar: ${passingGrade} - ${isPassed ? 'Tuntas' : currentAttempt < 2 ? 'Belum Tuntas / Remedial Tersedia' : 'Belum Tuntas / Kesempatan Habis'}).`,
+      teacherGrace ? 'TEACHER_GRACE_PASSED' : 'SUBMISSION_GRADED',
+      `Tugas/Kuis ${chapter?.title || ''} (${currentAttempt === 2 ? 'Remedial' : 'Percobaan 1'}) diverifikasi oleh ${teacherName} dengan nilai akhir ${finalScore} (Standar: ${passingGrade} - ${statusLabel}${teacherGrace ? ' - Tanpa Bonus XP' : ''}).`,
       target.courseId,
       target.chapterId
     );
 
-    // KONEKSI SKOR XP
-    if (isPassed && !studentProgress.chapters?.[target.chapterId]?.xpClaimed) {
+    // KONEKSI SKOR XP: HANYA DIBERIKAN JIKA LULUS MURNI (isPurePassed), TIDAK DIBERIKAN UNTUK KEBIJAKSANAAN GURU
+    if (isPurePassed && !studentProgress.chapters?.[target.chapterId]?.xpClaimed) {
       const starSettings = this.getCourseStarSettings(target.courseId);
       let basePoints = chapter?.activityRewardPoints;
       if (!basePoints) {
@@ -1116,7 +1129,7 @@ export class DataProvider {
         target.studentId,
         basePoints,
         'Penilaian Guru Tuntas',
-        `Hasil evaluasi ${chapter?.title || 'Tugas/Ujian'} oleh ${teacherName} dinyatakan tuntas dengan nilai ${finalScore}`,
+        `Hasil evaluasi ${chapter?.title || 'Tugas/Ujian'} oleh ${teacherName} dinyatakan tuntas murni dengan nilai ${finalScore}`,
         'ACADEMIC_EXCELLENCE',
         target.courseId,
         target.chapterId
@@ -1135,9 +1148,10 @@ export class DataProvider {
     submissionId: string,
     finalScore: number,
     feedback: string,
-    teacherName: string
+    teacherName: string,
+    teacherGrace: boolean = false
   ): Submission | null {
-    this.approveSubmissionAsync(submissionId, finalScore, feedback, teacherName).catch(console.error);
+    this.approveSubmissionAsync(submissionId, finalScore, feedback, teacherName, undefined, teacherGrace).catch(console.error);
     const subs = this.getSubmissions();
     const index = subs.findIndex((s) => s.id === submissionId);
     if (index === -1) return null;
