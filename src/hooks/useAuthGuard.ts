@@ -22,12 +22,22 @@ export function useAuthGuard({
 }: UseAuthGuardOptions = {}): UseAuthGuardResult {
   const router = useRouter();
   const pathname = usePathname();
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const rolesKey = allowedRoles ? allowedRoles.join(',') : '';
+
+  // Inisialisasi awal instan dari DataProvider
+  const [user, setUser] = useState<User | null>(() => DataProvider.getCurrentUser());
+  const [isAuthorized, setIsAuthorized] = useState<boolean>(() => {
+    const u = DataProvider.getCurrentUser();
+    if (!u) return false;
+    if (u.mustChangePassword && pathname !== '/auth/change-password') return false;
+    if (allowedRoles && allowedRoles.length > 0) return allowedRoles.includes(u.role);
+    return true;
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    return !DataProvider.getCurrentUser();
+  });
 
   useEffect(() => {
-    // Jalankan verifikasi sesi
     const verifySession = () => {
       const currentUser = DataProvider.getCurrentUser();
 
@@ -56,7 +66,6 @@ export function useAuthGuard({
         if (!hasAccess) {
           setIsAuthorized(false);
           setIsLoading(false);
-          // Redirect ke dashboard yang sesuai rolenya
           const fallbackPath =
             currentUser.role === 'admin'
               ? '/admin'
@@ -75,7 +84,7 @@ export function useAuthGuard({
     };
 
     verifySession();
-  }, [pathname, router, allowedRoles, redirectIfUnauthenticated]);
+  }, [pathname, router, rolesKey, redirectIfUnauthenticated]);
 
   return { user, isAuthorized, isLoading };
 }

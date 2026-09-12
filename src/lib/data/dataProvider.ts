@@ -469,8 +469,13 @@ export class DataProvider {
             }
           });
           const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
-          safeSetItem(STORAGE_KEYS.USERS, merged);
-          return merged;
+          // Keamanan: Hapus password dari objek user sebelum disimpan ke localStorage browser
+          const sanitizedForStorage = merged.map((u) => {
+            const { password, ...safeUser } = u as any;
+            return safeUser as User;
+          });
+          safeSetItem(STORAGE_KEYS.USERS, sanitizedForStorage);
+          return sanitizedForStorage;
         }
       } catch (err) {
         console.warn('Firestore getUsers error in DataProvider:', err);
@@ -519,7 +524,8 @@ export class DataProvider {
   }
 
   static setCurrentUser(user: User): void {
-    safeSetItem(STORAGE_KEYS.CURRENT_USER, user);
+    const { password, ...safeUser } = user as any;
+    safeSetItem(STORAGE_KEYS.CURRENT_USER, safeUser);
   }
 
   static changePassword(userId: string, newPassword: string): boolean {

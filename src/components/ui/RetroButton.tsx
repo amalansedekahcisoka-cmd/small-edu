@@ -57,8 +57,8 @@ export const RetroButton: React.FC<RetroButtonProps> = ({
   if (href && !disabled) {
     return (
       <Link href={href} className={baseClasses}>
-        {icon && <span className="shrink-0">{icon}</span>}
-        <span>{children}</span>
+        {icon && <span className="shrink-0 pointer-events-none">{icon}</span>}
+        <span className="pointer-events-none">{children}</span>
       </Link>
     );
   }
