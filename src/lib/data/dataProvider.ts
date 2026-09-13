@@ -15,6 +15,7 @@ import {
   BabLearningReport,
   BabAssessmentItem,
   getP5ProgressInfo,
+  JoinRequest,
 } from '@/types';
 import {
   MOCK_USERS,
@@ -73,11 +74,9 @@ function safeSetItem<T>(key: string, value: T): void {
   }
 }
 
-// Helper untuk kirim update ke server API (Hanya digunakan jika Firebase TIDAK aktif)
+// Helper untuk kirim update ke server API (tersimpan di server file data/db.json)
 async function postServerAction(action: string, payload: any): Promise<void> {
   if (typeof window === 'undefined') return;
-  // Jika Firebase aktif, jangan panggil server API lokal karena Firestore adalah database utama
-  if (isFirebaseConfigured) return;
   try {
     await fetch('/api/data', {
       method: 'POST',
@@ -446,8 +445,8 @@ export class DataProvider {
           valid.forEach((u) => {
             if (u && !deletedIds.has(u.id)) {
               const localPts = localPointsMap.get(u.id);
-              const finalPoints = Math.max(u.activityPoints || 0, localPts?.points || 0);
-              const finalStars = Math.max(u.starsCount || 0, localPts?.stars || 0);
+              const finalPoints = u.activityPoints !== undefined ? u.activityPoints : (localPts?.points || 0);
+              const finalStars = u.starsCount !== undefined ? u.starsCount : (localPts?.stars || 0);
               const mergedUser: User = {
                 ...userMap.get(u.id),
                 ...u,
@@ -455,17 +454,6 @@ export class DataProvider {
                 starsCount: finalStars,
               };
               userMap.set(u.id, mergedUser);
-
-              // Jika data lokal memiliki poin/bintang lebih tinggi, sinkronkan balik ke Firestore
-              if (
-                (localPts?.points || 0) > (u.activityPoints || 0) ||
-                (localPts?.stars || 0) > (u.starsCount || 0)
-              ) {
-                FirestoreService.updateUser(u.id, {
-                  activityPoints: finalPoints,
-                  starsCount: finalStars,
-                }).catch(console.error);
-              }
             }
           });
           const merged = Array.from(userMap.values()).filter((u) => !deletedIds.has(u.id));
@@ -496,16 +484,27 @@ export class DataProvider {
   static async syncLocalToFirestore(): Promise<void> {
     if (!isFirebaseConfigured) return;
     try {
+      const [firestoreUsers, firestoreClasses] = await Promise.all([
+        FirestoreService.getUsers(),
+        FirestoreService.getClasses(),
+      ]);
+      const firestoreUserIds = new Set(firestoreUsers.map((u) => u.id));
+      const firestoreClassIds = new Set(firestoreClasses.map((c) => c.id));
+
       const localUsers = this.getUsers();
       for (const u of localUsers) {
-        if (u.id.startsWith('user-') && u.id !== 'user-superadmin') {
+        // HANYA simpan ke Firestore jika user belum ada sama sekali di Firestore!
+        // Jangan menimpa user yang sudah ada agar tidak merusak password / status mustChangePassword yang sudah diperbarui pengguna
+        if (u.id.startsWith('user-') && u.id !== 'user-superadmin' && !firestoreUserIds.has(u.id)) {
           await FirestoreService.saveUser(u).catch(console.error);
         }
       }
 
       const localClasses = this.getClasses();
       for (const c of localClasses) {
-        await FirestoreService.saveClass(c).catch(console.error);
+        if (!firestoreClassIds.has(c.id)) {
+          await FirestoreService.saveClass(c).catch(console.error);
+        }
       }
     } catch (e) {
       console.warn('Sync local to firestore failed:', e);
@@ -526,25 +525,141 @@ export class DataProvider {
   static setCurrentUser(user: User): void {
     const { password, ...safeUser } = user as any;
     safeSetItem(STORAGE_KEYS.CURRENT_USER, safeUser);
+
+    // Sinkronkan juga flag mustChangePassword dan data terbaru ke cache USERS lokal
+    const users = safeGetItem<User[]>(STORAGE_KEYS.USERS, []);
+    const idx = users.findIndex((u) => u.id === user.id);
+    if (idx !== -1) {
+      users[idx] = {
+        ...users[idx],
+        ...safeUser,
+        password: user.password || users[idx].password,
+      };
+      safeSetItem(STORAGE_KEYS.USERS, users);
+    }
   }
 
-  static changePassword(userId: string, newPassword: string): boolean {
-    const users = this.getUsers();
-    const updated = users.map((u) => {
+  static async changePasswordAsync(userId: string, newPassword: string): Promise<boolean> {
+    const cleanPassword = newPassword.trim();
+    if (cleanPassword.length < 6) return false;
+
+    // 1. Update di memory & localStorage
+    const users = this.getUsers().map((u) => {
       if (u.id === userId) {
-        return { ...u, password: newPassword, mustChangePassword: false };
+        return { ...u, password: cleanPassword, mustChangePassword: false };
       }
       return u;
     });
-    safeSetItem(STORAGE_KEYS.USERS, updated);
-    postServerAction('UPDATE_USER', { userId, updates: { password: newPassword, mustChangePassword: false } });
+    safeSetItem(STORAGE_KEYS.USERS, users);
 
-    const current = this.getCurrentUser();
+    const current = safeGetItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
     if (current && current.id === userId) {
-      this.setCurrentUser({ ...current, password: newPassword, mustChangePassword: false });
+      this.setCurrentUser({ ...current, password: cleanPassword, mustChangePassword: false });
     }
 
-    FirestoreService.updateUserPasswordStatus(userId, false).catch(console.error);
+    // 2. Simpan permanen ke Cloud Firestore
+    if (isFirebaseConfigured) {
+      try {
+        await FirestoreService.updateUserPassword(userId, cleanPassword, false);
+      } catch (e) {
+        console.error('Error saving password to Firestore:', e);
+      }
+    }
+
+    // 3. Simpan ke database server lokal (data/db.json)
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_USER',
+          payload: { userId, updates: { password: cleanPassword, mustChangePassword: false } },
+        }),
+      });
+    } catch (e) {
+      console.warn('API sync failed during changePassword:', e);
+    }
+
+    // 4. Catat riwayat log aktivitas
+    const targetUser = users.find((u) => u.id === userId);
+    if (targetUser) {
+      this.logActivity(
+        targetUser.id,
+        targetUser.name,
+        targetUser.role,
+        'PASSWORD_CHANGED',
+        `Pengguna ${targetUser.name} berhasil memperbarui kata sandi mandiri secara permanen.`,
+        undefined,
+        undefined,
+        targetUser.gradeClass
+      );
+    }
+
+    return true;
+  }
+
+  static changePassword(userId: string, newPassword: string): boolean {
+    this.changePasswordAsync(userId, newPassword).catch(console.error);
+    return true;
+  }
+
+  static async resetUserPassword(userId: string, defaultPassword?: string): Promise<boolean> {
+    const users = this.getUsers();
+    const user = users.find((u) => u.id === userId);
+    if (!user) return false;
+
+    const resetPass = defaultPassword?.trim() || user.nisn_nip?.trim() || 'smalledu123';
+    const updates = {
+      password: resetPass,
+      mustChangePassword: true,
+    };
+
+    // 1. Update localStorage
+    const updatedUsers = users.map((u) => (u.id === userId ? { ...u, ...updates } : u));
+    safeSetItem(STORAGE_KEYS.USERS, updatedUsers);
+
+    const current = safeGetItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
+    if (current && current.id === userId) {
+      this.setCurrentUser({ ...current, ...updates });
+    }
+
+    // 2. Update Cloud Firestore
+    if (isFirebaseConfigured) {
+      try {
+        await FirestoreService.updateUserPassword(userId, resetPass, true);
+      } catch (e) {
+        console.error('Error resetting password in Firestore:', e);
+      }
+    }
+
+    // 3. Update server data/db.json
+    try {
+      await fetch('/api/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'UPDATE_USER',
+          payload: { userId, updates },
+        }),
+      });
+    } catch (e) {
+      console.warn('API sync failed during resetUserPassword:', e);
+    }
+
+    // 4. Log Aktivitas
+    this.logActivity(
+      'user-superadmin',
+      'Superadmin',
+      'admin',
+      'RESET_PASSWORD',
+      `Mereset kata sandi akun ${user.name} (${user.role === 'teacher' ? 'Guru' : 'Siswa'}) kembali ke ${
+        user.role === 'teacher' ? 'NIP' : 'NISN'
+      } (${resetPass}) dan mewajibkan ganti sandi saat login berikutnya.`,
+      undefined,
+      undefined,
+      user.gradeClass
+    );
+
     return true;
   }
 
@@ -562,7 +677,7 @@ export class DataProvider {
       password: defaultPassword,
       starsCount: 0,
       createdAt: new Date().toISOString(),
-      mustChangePassword: newUser.mustChangePassword !== undefined ? newUser.mustChangePassword : (newUser.role === 'student'),
+      mustChangePassword: newUser.mustChangePassword !== undefined ? newUser.mustChangePassword : true,
     };
     users.push(user);
     safeSetItem(STORAGE_KEYS.USERS, users);
@@ -593,7 +708,20 @@ export class DataProvider {
       'crs-1789119026980',
     ]);
     const stored = safeGetItem<Course[]>(STORAGE_KEYS.COURSES, []);
-    return stored.filter(
+    let hasMissingCode = false;
+    const coursesWithCodes = stored.map((c) => {
+      if (!c.joinCode) {
+        hasMissingCode = true;
+        return { ...c, joinCode: FirestoreService.generateJoinCode(c.subject || c.title) };
+      }
+      return c;
+    });
+
+    if (hasMissingCode) {
+      safeSetItem(STORAGE_KEYS.COURSES, coursesWithCodes);
+    }
+
+    return coursesWithCodes.filter(
       (c) =>
         c &&
         c.id &&
@@ -623,16 +751,26 @@ export class DataProvider {
     if (isFirebaseConfigured) {
       try {
         const firestoreCourses = await FirestoreService.getCourses();
-        if (Array.isArray(firestoreCourses)) {
-          const valid = firestoreCourses.filter(
-            (c) =>
-              c &&
-              c.id &&
-              !deletedIds.has(c.id) &&
-              c.teacherId !== 'user-teacher-rudiansyah' &&
-              c.id !== 'course-web-dev' &&
-              c.id !== 'crs-1789119026980'
-          );
+        if (Array.isArray(firestoreCourses) && firestoreCourses.length > 0) {
+          const valid = firestoreCourses
+            .filter(
+              (c) =>
+                c &&
+                c.id &&
+                !deletedIds.has(c.id) &&
+                c.teacherId !== 'user-teacher-rudiansyah' &&
+                c.id !== 'course-web-dev' &&
+                c.id !== 'crs-1789119026980'
+            )
+            .map((c) => {
+              if (!c.joinCode) {
+                const code = FirestoreService.generateJoinCode(c.subject || c.title);
+                FirestoreService.saveCourse({ ...c, joinCode: code }).catch(console.error);
+                return { ...c, joinCode: code };
+              }
+              return c;
+            });
+
           safeSetItem(STORAGE_KEYS.COURSES, valid);
           return valid;
         }
@@ -643,15 +781,23 @@ export class DataProvider {
 
     const serverData = await fetchServerData();
     if (serverData?.courses && Array.isArray(serverData.courses) && serverData.courses.length > 0) {
-      const valid = (serverData.courses as Course[]).filter(
-        (c) =>
-          c &&
-          c.id &&
-          !deletedIds.has(c.id) &&
-          c.teacherId !== 'user-teacher-rudiansyah' &&
-          c.id !== 'course-web-dev' &&
-          c.id !== 'crs-1789119026980'
-      );
+      const valid = (serverData.courses as Course[])
+        .filter(
+          (c) =>
+            c &&
+            c.id &&
+            !deletedIds.has(c.id) &&
+            c.teacherId !== 'user-teacher-rudiansyah' &&
+            c.id !== 'course-web-dev' &&
+            c.id !== 'crs-1789119026980'
+        )
+        .map((c) => {
+          if (!c.joinCode) {
+            return { ...c, joinCode: FirestoreService.generateJoinCode(c.subject || c.title) };
+          }
+          return c;
+        });
+
       safeSetItem(STORAGE_KEYS.COURSES, valid);
       return valid;
     }
@@ -668,6 +814,7 @@ export class DataProvider {
     const created: Course = {
       ...newCourse,
       id: `crs-${Date.now()}`,
+      joinCode: newCourse.joinCode || FirestoreService.generateJoinCode(newCourse.subject || newCourse.title),
     };
     courses.push(created);
     safeSetItem(STORAGE_KEYS.COURSES, courses);
@@ -676,6 +823,12 @@ export class DataProvider {
       await FirestoreService.saveCourse(created).catch(console.error);
     }
     return created;
+  }
+
+  static async updateCourseJoinCode(courseId: string, customCode: string): Promise<boolean> {
+    const cleanCode = customCode.trim().toUpperCase();
+    await this.updateCourse(courseId, { joinCode: cleanCode });
+    return true;
   }
 
   static async updateCourse(courseId: string, updates: Partial<Course>): Promise<void> {
@@ -703,10 +856,11 @@ export class DataProvider {
     };
   }
 
-  static updateCourseStarSettings(courseId: string, settings: Partial<CourseStarSettings>): CourseStarSettings {
+  static async updateCourseStarSettings(courseId: string, settings: Partial<CourseStarSettings>): Promise<CourseStarSettings> {
     const current = this.getCourseStarSettings(courseId);
     const updated: CourseStarSettings = { ...current, ...settings };
-    this.updateCourse(courseId, { starSettings: updated });
+    await this.updateCourse(courseId, { starSettings: updated });
+    await this.syncAllStudentsCoursePoints(courseId);
     return updated;
   }
 
@@ -1339,34 +1493,36 @@ export class DataProvider {
     });
 
     const currentPoints = user.activityPoints || 0;
-    if (calculatedPoints > currentPoints) {
+    if (calculatedPoints !== currentPoints) {
       const primaryCourse = courses[0];
       const starSettings = primaryCourse ? this.getCourseStarSettings(primaryCourse.id) : DEFAULT_STAR_SETTINGS;
       const xpPerStar = starSettings.xpPerStar || 100;
       const newStars = Math.floor(calculatedPoints / xpPerStar);
 
       user.activityPoints = calculatedPoints;
-      if (newStars > (user.starsCount || 0)) {
-        user.starsCount = newStars;
-      }
+      user.starsCount = newStars;
+
       safeSetItem(STORAGE_KEYS.USERS, users);
       postServerAction('UPDATE_USER', {
         userId,
-        updates: { activityPoints: calculatedPoints, starsCount: user.starsCount },
+        updates: { activityPoints: calculatedPoints, starsCount: newStars },
       });
-      FirestoreService.updateUser(userId, { activityPoints: calculatedPoints, starsCount: user.starsCount }).catch(console.error);
+      if (isFirebaseConfigured) {
+        FirestoreService.updateUser(userId, { activityPoints: calculatedPoints, starsCount: newStars }).catch(console.error);
+      }
 
       const current = safeGetItem<User | null>(STORAGE_KEYS.CURRENT_USER, null);
       if (current && current.id === userId) {
-        this.setCurrentUser({ ...current, ...user, activityPoints: calculatedPoints, starsCount: user.starsCount });
+        this.setCurrentUser({ ...current, ...user, activityPoints: calculatedPoints, starsCount: newStars });
       }
 
+      const diff = calculatedPoints - currentPoints;
       this.logActivity(
         userId,
         user.name,
         'student',
         'SYNC_XP_REWARD',
-        `Penyelarasan otomatis poin keaktifan: +${calculatedPoints - currentPoints} XP dari materi yang telah tuntas dipelajari.`,
+        `Penyelarasan otomatis poin keaktifan: disesuaikan menjadi ${calculatedPoints} XP (${diff >= 0 ? '+' : ''}${diff} XP) berdasarkan bobot penilaian terbaru dari guru.`,
         undefined,
         undefined,
         user.gradeClass
@@ -1374,6 +1530,17 @@ export class DataProvider {
     }
 
     return { totalPoints: user.activityPoints || 0, currentStars: user.starsCount || 0 };
+  }
+
+  /**
+   * Menyelaraskan ulang Poin Keaktifan (XP) seluruh siswa yang telah menyelesaikan materi
+   * saat guru mengubah bobot nilai/skor XP mata pelajaran atau bab.
+   */
+  static async syncAllStudentsCoursePoints(courseId?: string): Promise<void> {
+    const users = this.getUsers().filter((u) => u.role === 'student');
+    for (const student of users) {
+      this.syncUserActivityPoints(student.id);
+    }
   }
 
   static awardStars(
@@ -1714,5 +1881,112 @@ export class DataProvider {
     safeSetItem(STORAGE_KEYS.ACHIEVEMENTS, []);
     safeSetItem(STORAGE_KEYS.ACTIVITY_LOGS, []);
     FirestoreService.saveUser(MOCK_USERS[0]).catch(console.error);
+  }
+
+  // --- JOIN CODES, SELF REGISTRATION & APPROVAL WRAPPERS ---
+  /**
+   * Cari Course berdasarkan Join Code (Cloud-First dengan Fallback)
+   */
+  static async getCourseByJoinCode(code: string): Promise<Course | null> {
+    const cleaned = code.trim().toUpperCase();
+    // 1. Cek langsung ke Cloud Firestore
+    const fromFirestore = await FirestoreService.getCourseByJoinCode(cleaned);
+    if (fromFirestore) return fromFirestore;
+
+    // 2. Fallback cek ke daftar kursus lokal
+    const courses = this.getCourses();
+    const matched = courses.find((c) => (c.joinCode || '').toUpperCase() === cleaned);
+    if (matched) return matched;
+
+    return null;
+  }
+
+  /**
+   * Cek apakah NISN sudah terdaftar di Cloud Firestore
+   */
+  static async checkNisnExists(nisn: string): Promise<{ exists: boolean; user?: User }> {
+    return await FirestoreService.checkNisnExists(nisn);
+  }
+
+  /**
+   * Registrasi Mandiri Siswa dengan Join Code (Cloud-First)
+   */
+  static async registerStudentSelf(data: {
+    name: string;
+    nisn: string;
+    password: string;
+    courseId: string;
+    courseTitle: string;
+    teacherId: string;
+    teacherName: string;
+    gradeClass?: string;
+  }): Promise<{ success: boolean; message: string; user?: User }> {
+    const res = await FirestoreService.registerStudentSelf(data);
+    if (res.success && res.user) {
+      // Simpan juga ke cache lokal agar langsung sinkron bila dibuka di browser yang sama
+      const users = this.getUsers();
+      if (!users.some((u) => u.id === res.user!.id)) {
+        users.push(res.user);
+        safeSetItem(STORAGE_KEYS.USERS, users);
+      }
+    }
+    return res;
+  }
+
+  /**
+   * Siswa mengajukan diri bergabung ke Mapel / Kursus lain
+   */
+  static async requestJoinOtherCourse(studentId: string, course: Course): Promise<{ success: boolean; message: string }> {
+    return await FirestoreService.requestJoinOtherCourse(studentId, course);
+  }
+
+  /**
+   * Guru mengambil antrean permintaan bergabung
+   */
+  static async getTeacherJoinRequests(teacherId: string): Promise<JoinRequest[]> {
+    return await FirestoreService.getTeacherJoinRequests(teacherId);
+  }
+
+  /**
+   * Guru menyetujui siswa bergabung ke kelas
+   */
+  static async approveStudentJoin(requestId: string, studentId: string, courseId: string): Promise<{ success: boolean; message: string }> {
+    const res = await FirestoreService.approveStudentJoin(requestId, studentId, courseId);
+    if (res.success) {
+      // Sinkronkan cache lokal jika ada
+      const users = this.getUsers();
+      const st = users.find((u) => u.id === studentId);
+      if (st) {
+        st.status = 'active';
+        st.enrolledCourses = (st.enrolledCourses || []).map((e) =>
+          e.courseId === courseId ? { ...e, status: 'active' as const } : e
+        );
+        safeSetItem(STORAGE_KEYS.USERS, users);
+      }
+    }
+    return res;
+  }
+
+  /**
+   * Guru menolak siswa bergabung ke kelas
+   */
+  static async rejectStudentJoin(requestId: string, studentId: string, courseId: string): Promise<{ success: boolean; message: string }> {
+    const res = await FirestoreService.rejectStudentJoin(requestId, studentId, courseId);
+    if (res.success) {
+      const users = this.getUsers();
+      const st = users.find((u) => u.id === studentId);
+      if (st) {
+        st.enrolledCourses = (st.enrolledCourses || []).filter((e) => e.courseId !== courseId);
+        safeSetItem(STORAGE_KEYS.USERS, users);
+      }
+    }
+    return res;
+  }
+
+  /**
+   * Memastikan seluruh kursus memiliki kode join
+   */
+  static async ensureCourseJoinCodes(): Promise<void> {
+    await FirestoreService.ensureCourseJoinCodes();
   }
 }

@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { DataProvider, DEFAULT_STAR_SETTINGS } from '@/lib/data/dataProvider';
-import { Course, Chapter, ChapterType, Submission, User, CourseStarSettings, Question } from '@/types';
+import { FirestoreService } from '@/lib/firebase/firestoreService';
+import { Course, Chapter, ChapterType, Submission, User, CourseStarSettings, Question, JoinRequest } from '@/types';
 import { exportBabReportToExcel } from '@/lib/export/excelExporter';
 import { QuestionBuilderModal } from '@/components/teacher/QuestionBuilderModal';
 import { RetroWindow } from '@/components/ui/RetroWindow';
@@ -36,6 +37,11 @@ import {
   Star,
   Sliders,
   FileSpreadsheet,
+  Copy,
+  Users,
+  Check,
+  RefreshCw,
+  UserPlus,
 } from 'lucide-react';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 
@@ -100,6 +106,7 @@ export default function TeacherDashboard() {
   const [isQuestionBuilderOpen, setIsQuestionBuilderOpen] = useState<boolean>(false);
 
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [newCourseTitle, setNewCourseTitle] = useState('');
   const [newCourseSubject, setNewCourseSubject] = useState('');
   const [newCourseGrade, setNewCourseGrade] = useState('Kelas X');
@@ -109,6 +116,23 @@ export default function TeacherDashboard() {
   // Daftar kelas yang tersedia di sistem
   const [availableClasses, setAvailableClasses] = useState<import('@/types').ClassRoom[]>([]);
   const [courseClassFilter, setCourseClassFilter] = useState<string>('ALL');
+
+  // State Permintaan Bergabung Siswa (Approval Queue)
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [isJoinRequestModalOpen, setIsJoinRequestModalOpen] = useState<boolean>(false);
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+  const [copiedCodeCourseId, setCopiedCodeCourseId] = useState<string | null>(null);
+
+  // State Ubah / Atur Kode Kelas Manual oleh Guru
+  const [editingJoinCodeCourse, setEditingJoinCodeCourse] = useState<Course | null>(null);
+  const [customJoinCodeInput, setCustomJoinCodeInput] = useState<string>('');
+  const [isSavingCustomCode, setIsSavingCustomCode] = useState<boolean>(false);
+
+  const loadJoinRequests = (teacherId: string) => {
+    DataProvider.getTeacherJoinRequests(teacherId).then((reqs) => {
+      setJoinRequests(reqs);
+    }).catch(console.error);
+  };
 
   const loadData = (courseToSelect?: Course, explicitCourses?: Course[]) => {
     const currentUser = DataProvider.getCurrentUser();
@@ -192,6 +216,13 @@ export default function TeacherDashboard() {
     DataProvider.getClassesAsync().then((serverClasses) => {
       if (serverClasses && serverClasses.length > 0) {
         setAvailableClasses(serverClasses);
+      }
+    });
+
+    // Pastikan kode kelas terisi dan muat antrean pendaftaran
+    DataProvider.ensureCourseJoinCodes().then(() => {
+      if (currentUser) {
+        loadJoinRequests(currentUser.id);
       }
     });
   }, []);
@@ -304,16 +335,16 @@ export default function TeacherDashboard() {
   };
 
   // Simpan Pengaturan Bintang Mata Pelajaran
-  const handleSaveStarSettings = (e: React.FormEvent) => {
+  const handleSaveStarSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCourse) return;
-    const updated = DataProvider.updateCourseStarSettings(selectedCourse.id, starSettingsForm);
+    const updated = await DataProvider.updateCourseStarSettings(selectedCourse.id, starSettingsForm);
     setSelectedCourse({ ...selectedCourse, starSettings: updated });
     setCourses((prev) =>
       prev.map((c) => (c.id === selectedCourse.id ? { ...c, starSettings: updated } : c))
     );
     setIsStarSettingsModalOpen(false);
-    setNotification('Pengaturan Skor Bintang & Poin Keaktifan berhasil diperbarui! ⭐');
+    setNotification('Pengaturan Skor Bintang & Poin Keaktifan berhasil diperbarui & disinkronkan ke seluruh siswa! ⭐');
     setTimeout(() => setNotification(null), 5000);
   };
 
@@ -507,7 +538,7 @@ export default function TeacherDashboard() {
       ...(formattedExternalUrl ? { externalUrl: formattedExternalUrl } : {}),
       ...(formattedVideoUrl ? { videoUrl: formattedVideoUrl } : {}),
       ...(chapterType === 'assignment' && assignmentPrompt.trim() ? { assignmentPrompt: assignmentPrompt.trim() } : {}),
-      ...(activityRewardPoints.trim() ? { activityRewardPoints: Math.max(1, Number(activityRewardPoints)) } : {}),
+      activityRewardPoints: activityRewardPoints.trim() ? Math.max(1, Number(activityRewardPoints)) : undefined,
       ...(scheduleData ? { schedule: scheduleData } : {}),
       ...(questionsInput.length > 0 ? { questions: questionsInput } : {}),
     };
@@ -516,7 +547,10 @@ export default function TeacherDashboard() {
       if (editingChapterId) {
         // Update
         await DataProvider.updateChapter(editingChapterId, chapterPayload);
-        setNotification(`Materi "${title.trim()}" berhasil diperbarui!`);
+        if (selectedCourse) {
+          await DataProvider.syncAllStudentsCoursePoints(selectedCourse.id);
+        }
+        setNotification(`Materi "${title.trim()}" berhasil diperbarui & poin XP siswa diselaraskan!`);
       } else {
         // Tambah Baru
         await DataProvider.addChapter(chapterPayload);
@@ -570,6 +604,37 @@ export default function TeacherDashboard() {
     }
 
     try {
+      if (editingCourse) {
+        // Mode Update Kursus yang sudah ada (termasuk update target kelas yang diajar)
+        await DataProvider.updateCourse(editingCourse.id, {
+          title: newCourseTitle.trim(),
+          subject: newCourseSubject.trim(),
+          gradeLevel: newCourseGrade,
+          description: newCourseDesc.trim() || 'Mata pelajaran pembelajaran mandiri berurutan.',
+          targetClasses: newCourseTargetClasses,
+        });
+
+        setNotification(`Mata pelajaran "${newCourseTitle.trim()}" berhasil diperbarui! Kelas yang diajar: ${newCourseTargetClasses.join(', ')}`);
+        setIsCourseModalOpen(false);
+        const updatedCourse = {
+          ...editingCourse,
+          title: newCourseTitle.trim(),
+          subject: newCourseSubject.trim(),
+          gradeLevel: newCourseGrade,
+          description: newCourseDesc.trim(),
+          targetClasses: newCourseTargetClasses,
+        };
+        setEditingCourse(null);
+        setNewCourseTitle('');
+        setNewCourseSubject('');
+        setNewCourseDesc('');
+        setNewCourseTargetClasses([]);
+        loadData(updatedCourse);
+        setTimeout(() => setNotification(null), 6000);
+        return;
+      }
+
+      // Mode Tambah Kursus Baru
       const created = await DataProvider.addCourse({
         title: newCourseTitle.trim(),
         subject: newCourseSubject.trim(),
@@ -592,8 +657,8 @@ export default function TeacherDashboard() {
       loadData(created);
       setTimeout(() => setNotification(null), 6000);
     } catch (err: any) {
-      console.error('Error creating course:', err);
-      alert('Gagal membuat mata pelajaran: ' + (err?.message || 'Terjadi kesalahan sistem'));
+      console.error('Error saving course:', err);
+      alert('Gagal menyimpan mata pelajaran: ' + (err?.message || 'Terjadi kesalahan sistem'));
     }
   };
 
@@ -632,6 +697,24 @@ export default function TeacherDashboard() {
 
         {/* Action Shortcuts */}
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Tombol Antrean Permintaan Siswa */}
+          <button
+            onClick={() => {
+              if (user) loadJoinRequests(user.id);
+              setIsJoinRequestModalOpen(true);
+            }}
+            className={`neo-btn inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-sm sm:text-base font-bold select-none cursor-pointer transition-colors ${
+              joinRequests.length > 0
+                ? 'bg-[#ffde59] text-black hover:bg-yellow-400 animate-pulse'
+                : 'bg-white text-black hover:bg-zinc-100'
+            }`}
+          >
+            <UserPlus className="w-4 h-4 text-black shrink-0 pointer-events-none" />
+            <span className="pointer-events-none">
+              Permintaan Siswa {joinRequests.length > 0 && `(${joinRequests.length} Baru!)`}
+            </span>
+          </button>
+
           <Link
             href="/teacher/activity-log"
             className="neo-btn inline-flex items-center justify-center gap-2 rounded-none px-4 py-2 text-sm sm:text-base font-bold select-none cursor-pointer bg-white text-black hover:bg-zinc-100"
@@ -700,10 +783,10 @@ export default function TeacherDashboard() {
                 .map((c) => (
                 <div
                   key={c.id}
-                  className={`p-3 neo-border-sm transition-all ${
+                  className={`p-3 neo-border transition-all ${
                     selectedCourse?.id === c.id
-                      ? 'bg-[#008080] text-white neo-shadow-sm'
-                      : 'bg-white text-black hover:bg-zinc-50'
+                      ? 'bg-[#fffde6] text-black border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ring-2 ring-[#ffde59]'
+                      : 'bg-white text-black hover:bg-zinc-50 border border-zinc-300'
                   }`}
                 >
                   <div
@@ -711,14 +794,14 @@ export default function TeacherDashboard() {
                     className="cursor-pointer"
                   >
                     <div className="flex items-center justify-between">
-                      <span className={`text-[11px] font-mono font-bold ${selectedCourse?.id === c.id ? 'text-teal-100' : 'text-zinc-600'}`}>
+                      <span className={`text-[11px] font-mono font-bold ${selectedCourse?.id === c.id ? 'text-amber-900 bg-amber-200/70 px-1.5 py-0.5 neo-border-sm' : 'text-zinc-600'}`}>
                         {c.gradeLevel} • {c.subject}
                       </span>
-                      <RetroBadge variant="green" size="sm">
-                        AKTIF
+                      <RetroBadge variant={selectedCourse?.id === c.id ? 'yellow' : 'green'} size="sm">
+                        {selectedCourse?.id === c.id ? 'DIPILIH ⭐' : 'AKTIF'}
                       </RetroBadge>
                     </div>
-                    <h4 className="font-black text-sm mt-1">{c.title}</h4>
+                    <h4 className="font-black text-sm mt-1 text-black">{c.title}</h4>
                     {/* Target Classes */}
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {(c.targetClasses && c.targetClasses.length > 0) ? (
@@ -731,10 +814,83 @@ export default function TeacherDashboard() {
                         <span className="text-[10px] font-mono text-zinc-400 italic">Semua Kelas</span>
                       )}
                     </div>
+
+                    {/* Badge Kode Kelas Guru dengan Tombol Salin & Ubah */}
+                    <div className="mt-2.5 flex items-center justify-between bg-white p-2 neo-border-sm border-black">
+                      <div className="flex items-center gap-1.5 text-[11px] font-mono">
+                        <span className="text-zinc-700 font-bold">KODE:</span>
+                        <strong className="font-mono text-xs tracking-wider text-black bg-[#ffde59] px-2 py-0.5 neo-border-sm font-black">
+                          {c.joinCode || 'GEN-CODE'}
+                        </strong>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (c.joinCode) {
+                              navigator.clipboard.writeText(c.joinCode);
+                              setCopiedCodeCourseId(c.id);
+                              setTimeout(() => setCopiedCodeCourseId(null), 2000);
+                            }
+                          }}
+                          className="px-2 py-1 text-[10px] font-mono font-bold bg-white text-black neo-border-sm hover:bg-zinc-100 flex items-center gap-1 transition-colors"
+                          title="Salin Kode untuk Siswa"
+                        >
+                          {copiedCodeCourseId === c.id ? (
+                            <>
+                              <Check className="w-2.5 h-2.5 text-emerald-600" />
+                              <span className="text-emerald-700">Tersalin!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-2.5 h-2.5" />
+                              <span>Salin</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingJoinCodeCourse(c);
+                            setCustomJoinCodeInput(c.joinCode || '');
+                          }}
+                          className="px-2 py-1 text-[10px] font-mono font-bold bg-[#4ecdc4] text-black neo-border-sm hover:bg-teal-300 flex items-center gap-1 transition-colors"
+                          title="Ubah / Kustomisasi Kode Kelas Ini"
+                        >
+                          <Edit3 className="w-2.5 h-2.5" />
+                          <span>Ubah</span>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  {/* Delete course button */}
-                  <div className="mt-2 pt-2 border-t border-black/20 flex justify-end">
+                  {/* Action buttons footer (Edit Kelas & Hapus) */}
+                  <div className="mt-2 pt-2 border-t border-black/10 flex items-center justify-between">
                     <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingCourse(c);
+                        setNewCourseTitle(c.title);
+                        setNewCourseSubject(c.subject);
+                        setNewCourseGrade(c.gradeLevel || 'Kelas X');
+                        setNewCourseDesc(c.description || '');
+                        setNewCourseTargetClasses(c.targetClasses || []);
+                        DataProvider.getClassesAsync().then((cls) => {
+                          if (cls && cls.length > 0) setAvailableClasses(cls);
+                        });
+                        setIsCourseModalOpen(true);
+                      }}
+                      className="px-2 py-1 neo-border-sm bg-white hover:bg-zinc-100 text-black text-[11px] font-mono font-bold flex items-center gap-1 transition-colors"
+                      title="Ubah Nama Mapel & Kelas yang Diajar"
+                    >
+                      <Edit3 className="w-3 h-3 text-[#008080]" />
+                      <span>Edit Mapel & Kelas</span>
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={(e) => { e.stopPropagation(); handleDeleteCourse(c); }}
                       className="p-1 neo-border-sm bg-[#ff7675] hover:bg-red-500 text-white transition-colors"
                       title="Hapus Kursus Ini"
@@ -1935,14 +2091,18 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* MODAL BUAT KURSUS BARU */}
+      {/* MODAL BUAT / EDIT KURSUS */}
       {isCourseModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="w-full max-w-md">
             <RetroWindow
-              title="BUAT MATA PELAJARAN / KURSUS BARU"
+              title={editingCourse ? "EDIT MATA PELAJARAN & KELAS" : "BUAT MATA PELAJARAN / KURSUS BARU"}
               headerColor="navy"
               icon={<GraduationCap className="w-4 h-4 text-yellow-300" />}
+              onClose={() => {
+                setIsCourseModalOpen(false);
+                setEditingCourse(null);
+              }}
             >
               <form onSubmit={handleCreateCourse} className="space-y-4 font-mono text-xs">
                 <div>
@@ -2081,7 +2241,10 @@ export default function TeacherDashboard() {
                     type="button"
                     variant="white"
                     size="sm"
-                    onClick={() => setIsCourseModalOpen(false)}
+                    onClick={() => {
+                      setIsCourseModalOpen(false);
+                      setEditingCourse(null);
+                    }}
                   >
                     Batal
                   </RetroButton>
@@ -2089,9 +2252,9 @@ export default function TeacherDashboard() {
                     type="submit"
                     variant="yellow"
                     size="sm"
-                    icon={<Plus className="w-4 h-4" />}
+                    icon={editingCourse ? <CheckCircle2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   >
-                    Simpan Kursus
+                    {editingCourse ? 'Perbarui Mapel & Kelas' : 'Simpan Kursus'}
                   </RetroButton>
                 </div>
               </form>
@@ -2142,6 +2305,242 @@ export default function TeacherDashboard() {
                   </button>
                 </div>
               </div>
+            </RetroWindow>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL PERMINTAAN BERGABUNG SISWA (APPROVAL QUEUE) */}
+      {isJoinRequestModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl animate-in fade-in zoom-in-95 duration-150">
+            <RetroWindow
+              title={`PERMINTAAN SISWA BERGABUNG KELAS (${joinRequests.length})`}
+              headerColor="teal"
+              icon={<UserPlus className="w-4 h-4 text-white" />}
+              onClose={() => setIsJoinRequestModalOpen(false)}
+            >
+              <div className="p-4 space-y-4">
+                <div className="bg-[#f0fdfa] p-3 neo-border-sm text-xs font-mono space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-[#008080]">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Daftar Siswa Menunggu Persetujuan Anda</span>
+                  </div>
+                  <p className="text-zinc-600">
+                    Siswa yang mendaftar mandiri atau meminta gabung ke mata pelajaran Anda akan muncul di bawah ini. Klik <strong>Setujui</strong> untuk mengaktifkan akun dan memberikan akses materi pembelajaran.
+                  </p>
+                </div>
+
+                {joinRequests.length === 0 ? (
+                  <div className="p-8 text-center bg-white neo-border-sm font-mono space-y-2">
+                    <div className="text-3xl">🎉</div>
+                    <div className="font-bold text-sm text-zinc-700">Tidak ada permintaan menunggu!</div>
+                    <div className="text-xs text-zinc-500">
+                      Semua siswa yang mendaftar telah diproses atau belum ada siswa baru yang memasukkan kode kelas Anda.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                    {joinRequests.map((req) => (
+                      <div
+                        key={req.id}
+                        className="bg-white p-3 neo-border-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-zinc-50 transition-colors"
+                      >
+                        <div className="space-y-1 font-mono text-xs">
+                          <div className="flex items-center gap-2">
+                            <strong className="text-sm text-black">{req.studentName}</strong>
+                            <span className="bg-zinc-100 text-zinc-700 px-1.5 py-0.5 neo-border-sm text-[11px]">
+                              NISN: {req.studentNisn}
+                            </span>
+                            {req.studentClass && (
+                              <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 neo-border-sm text-[11px]">
+                                {req.studentClass}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-zinc-600 text-[11px]">
+                            Mata Pelajaran: <strong className="text-[#008080]">{req.courseTitle}</strong>
+                          </div>
+                          <div className="text-zinc-400 text-[10px]">
+                            Diajukan: {new Date(req.createdAt).toLocaleString('id-ID')}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
+                          <button
+                            type="button"
+                            disabled={processingRequestId === req.id}
+                            onClick={async () => {
+                              if (!confirm(`Tolak permintaan ${req.studentName}?`)) return;
+                              setProcessingRequestId(req.id);
+                              try {
+                                const res = await DataProvider.rejectStudentJoin(req.id, req.studentId, req.courseId);
+                                if (res.success) {
+                                  setJoinRequests((prev) => prev.filter((r) => r.id !== req.id));
+                                  setNotification(`Permintaan ${req.studentName} berhasil ditolak.`);
+                                  setTimeout(() => setNotification(null), 4000);
+                                } else {
+                                  alert(res.message);
+                                }
+                              } catch (err) {
+                                console.error('Error rejecting student:', err);
+                              } finally {
+                                setProcessingRequestId(null);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs font-mono font-bold bg-white text-red-600 neo-border-sm hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            Tolak
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={processingRequestId === req.id}
+                            onClick={async () => {
+                              setProcessingRequestId(req.id);
+                              try {
+                                const res = await DataProvider.approveStudentJoin(req.id, req.studentId, req.courseId);
+                                if (res.success) {
+                                  setJoinRequests((prev) => prev.filter((r) => r.id !== req.id));
+                                  setNotification(`Berhasil! ${req.studentName} kini aktif di kelas ${req.courseTitle}.`);
+                                  setTimeout(() => setNotification(null), 5000);
+                                } else {
+                                  alert(res.message);
+                                }
+                              } catch (err) {
+                                console.error('Error approving student:', err);
+                              } finally {
+                                setProcessingRequestId(null);
+                              }
+                            }}
+                            className="px-3 py-1.5 text-xs font-mono font-bold bg-emerald-500 text-white neo-border-sm hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1.5 transition-colors shadow-sm"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>{processingRequestId === req.id ? 'Menyetujui...' : 'Setujui (Approve)'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 border-t-2 border-black flex justify-between items-center font-mono text-xs">
+                  <span className="text-zinc-500">
+                    {user?.name} • Kode pembelajaran unik aktif
+                  </span>
+                  <RetroButton
+                    type="button"
+                    variant="white"
+                    size="sm"
+                    onClick={() => setIsJoinRequestModalOpen(false)}
+                  >
+                    Tutup
+                  </RetroButton>
+                </div>
+              </div>
+            </RetroWindow>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ATUR / KUSTOMISASI KODE KELAS OLEH GURU */}
+      {editingJoinCodeCourse && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-150">
+            <RetroWindow
+              title="ATUR KODE KELAS GURU"
+              headerColor="mustard"
+              icon={<Edit3 className="w-4 h-4 text-black" />}
+              onClose={() => setEditingJoinCodeCourse(null)}
+            >
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const clean = customJoinCodeInput.trim().toUpperCase();
+                  if (!clean || clean.length < 3) {
+                    alert('Kode kelas minimal 3 karakter (contoh: MTK-7A, INDO-10, atau BHS-X).');
+                    return;
+                  }
+
+                  setIsSavingCustomCode(true);
+                  try {
+                    await DataProvider.updateCourseJoinCode(editingJoinCodeCourse.id, clean);
+                    setNotification(`Kode kelas untuk "${editingJoinCodeCourse.title}" berhasil diubah menjadi: ${clean}!`);
+                    setEditingJoinCodeCourse(null);
+                    // Refresh data kursus lokal
+                    loadData({ ...editingJoinCodeCourse, joinCode: clean });
+                    setTimeout(() => setNotification(null), 5000);
+                  } catch (err: any) {
+                    console.error('Error updating join code:', err);
+                    alert('Gagal menyimpan kode kelas: ' + (err?.message || 'Terjadi kesalahan'));
+                  } finally {
+                    setIsSavingCustomCode(false);
+                  }
+                }}
+                className="p-4 space-y-4"
+              >
+                <div className="bg-[#fffde6] p-3 neo-border-sm text-xs font-mono space-y-1">
+                  <div className="font-bold text-amber-900">
+                    💡 Kustomisasi Kode Kelas untuk Siswa
+                  </div>
+                  <p className="text-zinc-700 leading-relaxed">
+                    Anda bebas menentukan kode yang mudah diingat oleh murid (misal: <strong>BINDO-10</strong> atau <strong>MTK-7A</strong>) atau biarkan sistem membuatkan secara otomatis.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 font-mono">
+                  <label className="block text-xs font-bold text-zinc-800">
+                    KODE KELAS (MAKS. 10 KARAKTER):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      required
+                      maxLength={10}
+                      placeholder="e.g. BINDO-10"
+                      value={customJoinCodeInput}
+                      onChange={(e) => setCustomJoinCodeInput(e.target.value.toUpperCase())}
+                      className="w-full p-2.5 neo-border-sm font-mono font-bold text-base tracking-widest text-center uppercase bg-white focus:bg-[#f0fdfa] focus:border-[#008080] focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomCode = FirestoreService.generateJoinCode(
+                          editingJoinCodeCourse.subject || editingJoinCodeCourse.title
+                        );
+                        setCustomJoinCodeInput(randomCode);
+                      }}
+                      className="px-3 py-2.5 bg-zinc-100 neo-border-sm text-xs font-bold hover:bg-zinc-200 flex items-center gap-1 shrink-0"
+                      title="Acak Kode Baru Otomatis"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Acak</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    Mata Pelajaran: <strong>{editingJoinCodeCourse.title}</strong>
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2 border-t-2 border-black">
+                  <RetroButton
+                    type="button"
+                    variant="white"
+                    size="sm"
+                    onClick={() => setEditingJoinCodeCourse(null)}
+                  >
+                    Batal
+                  </RetroButton>
+                  <RetroButton
+                    type="submit"
+                    variant="teal"
+                    size="sm"
+                    disabled={isSavingCustomCode || !customJoinCodeInput.trim()}
+                  >
+                    {isSavingCustomCode ? 'Menyimpan...' : 'Simpan Kode Kelas'}
+                  </RetroButton>
+                </div>
+              </form>
             </RetroWindow>
           </div>
         </div>

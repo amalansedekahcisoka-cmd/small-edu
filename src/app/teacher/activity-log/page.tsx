@@ -151,8 +151,13 @@ export default function TeacherActivityLogPage() {
     loadData();
     const interval = setInterval(() => {
       loadData();
-    }, 6000);
-    return () => clearInterval(interval);
+    }, 30000);
+    const handleFocus = () => loadData();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, []);
 
   // Ambil progres belajar siswa langsung dari Cloud Firestore saat siswa dipilih

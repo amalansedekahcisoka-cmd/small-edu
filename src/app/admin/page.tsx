@@ -67,6 +67,29 @@ function AdminContent() {
     name: string;
   } | null>(null);
 
+  // State Modal Konfirmasi Reset Password
+  const [resetConfirm, setResetConfirm] = useState<User | null>(null);
+
+  const handleOpenResetPassword = (user: User) => {
+    setResetConfirm(user);
+  };
+
+  const executeResetPassword = async () => {
+    if (!resetConfirm) return;
+    const defaultPassword = resetConfirm.nisn_nip?.trim() || 'smalledu123';
+
+    await DataProvider.resetUserPassword(resetConfirm.id, defaultPassword);
+
+    setNotification(
+      `Kata sandi ${resetConfirm.role === 'teacher' ? 'Guru' : 'Siswa'} "${resetConfirm.name}" berhasil di-reset ke ${
+        resetConfirm.role === 'teacher' ? 'NIP' : 'NISN'
+      } (${defaultPassword}) & berstatus Wajib Ganti.`
+    );
+    setResetConfirm(null);
+    await loadData();
+    setTimeout(() => setNotification(null), 6000);
+  };
+
   const executeDelete = () => {
     if (!deleteConfirm) return;
     if (deleteConfirm.type === 'guru') {
@@ -140,9 +163,10 @@ function AdminContent() {
       role: 'teacher',
       nisn_nip: teacherNip.trim(),
       assignedClasses: teacherAssignedClasses,
+      mustChangePassword: true,
     });
 
-    setNotification(`Guru ${teacherName} berhasil ditambahkan! Kata sandi default adalah NIP: ${teacherNip.trim()}`);
+    setNotification(`Guru ${teacherName} berhasil ditambahkan! Kata sandi default adalah NIP: ${teacherNip.trim()} (Wajib ganti sandi saat login pertama).`);
     setTeacherName('');
     setTeacherEmail('');
     setTeacherNip('');
@@ -155,13 +179,20 @@ function AdminContent() {
     e.preventDefault();
     if (!editingTeacher) return;
 
-    DataProvider.updateUser(editingTeacher.id, {
+    const updates: Partial<User> = {
       name: editingTeacher.name.trim(),
       email: editingTeacher.email.trim(),
       nisn_nip: editingTeacher.nisn_nip?.trim(),
-      password: editingTeacher.password?.trim(),
       assignedClasses: editingTeacher.assignedClasses || [],
-    });
+    };
+    if (editingTeacher.password && editingTeacher.password.trim() !== '') {
+      updates.password = editingTeacher.password.trim();
+    }
+    if (editingTeacher.mustChangePassword !== undefined) {
+      updates.mustChangePassword = editingTeacher.mustChangePassword;
+    }
+
+    DataProvider.updateUser(editingTeacher.id, updates);
 
     setNotification(`Data Guru ${editingTeacher.name} berhasil diperbarui!`);
     setEditingTeacher(null);
@@ -241,14 +272,18 @@ function AdminContent() {
     e.preventDefault();
     if (!editingStudent) return;
 
-    DataProvider.updateUser(editingStudent.id, {
+    const updates: Partial<User> = {
       name: editingStudent.name.trim(),
       email: editingStudent.email.trim(),
       nisn_nip: editingStudent.nisn_nip?.trim(),
       gradeClass: editingStudent.gradeClass,
-      password: editingStudent.password?.trim(),
       mustChangePassword: editingStudent.mustChangePassword,
-    });
+    };
+    if (editingStudent.password && editingStudent.password.trim() !== '') {
+      updates.password = editingStudent.password.trim();
+    }
+
+    DataProvider.updateUser(editingStudent.id, updates);
 
     setNotification(`Data Siswa ${editingStudent.name} berhasil diperbarui!`);
     setEditingStudent(null);
@@ -646,7 +681,8 @@ function AdminContent() {
                       <th className="p-2.5">NIP</th>
                       <th className="p-2.5">Kelas Diampu</th>
                       <th className="p-2.5">Password</th>
-                      <th className="p-2.5 text-center">Aksi (Edit / Hapus)</th>
+                      <th className="p-2.5">Status Sandi</th>
+                      <th className="p-2.5 text-center">Aksi (Reset / Edit / Hapus)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -673,14 +709,32 @@ function AdminContent() {
                             <span className="text-[10px] text-zinc-400 italic">Belum diatur</span>
                           )}
                         </td>
+                        <td className="p-2.5 font-bold">
+                          {t.password || t.nisn_nip || 'Sesuai NIP'}
+                        </td>
                         <td className="p-2.5">
-                          <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 border border-emerald-400 font-bold">
-                            {t.password || t.nisn_nip || 'Sesuai NIP'}
-                          </span>
+                          {t.mustChangePassword ? (
+                            <span className="bg-amber-100 text-amber-900 px-1.5 py-0.5 border border-amber-400 font-bold">
+                              Wajib Ganti
+                            </span>
+                          ) : (
+                            <span className="bg-emerald-100 text-emerald-900 px-1.5 py-0.5 border border-emerald-400 font-bold">
+                              Aktif
+                            </span>
+                          )}
                         </td>
                         <td className="p-2.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
+                              type="button"
+                              onClick={() => handleOpenResetPassword(t)}
+                              className="p-1 neo-border-sm bg-[#fdcb6e] hover:bg-[#e1b12c] text-black font-bold"
+                              title="Reset Password ke NIP"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setEditingTeacher(t)}
                               className="p-1 neo-border-sm bg-[#008080] hover:bg-[#006666] text-white font-bold"
                               title="Ubah Data Guru"
@@ -688,6 +742,7 @@ function AdminContent() {
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteTeacher(t)}
                               className="p-1 neo-border-sm bg-[#ff7675] hover:bg-red-600 text-white font-bold"
                               title="Hapus Guru"
@@ -701,7 +756,7 @@ function AdminContent() {
 
                     {teachers.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="p-6 text-center text-zinc-500">
+                        <td colSpan={7} className="p-6 text-center text-zinc-500">
                           Belum ada guru yang didaftarkan.
                         </td>
                       </tr>
@@ -815,7 +870,7 @@ function AdminContent() {
                       <th className="p-2.5">Email</th>
                       <th className="p-2.5">NISN (Password)</th>
                       <th className="p-2.5">Status Sandi</th>
-                      <th className="p-2.5 text-center">Aksi (Edit / Hapus)</th>
+                      <th className="p-2.5 text-center">Aksi (Reset / Edit / Hapus)</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -844,6 +899,15 @@ function AdminContent() {
                         <td className="p-2.5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
+                              type="button"
+                              onClick={() => handleOpenResetPassword(s)}
+                              className="p-1 neo-border-sm bg-[#fdcb6e] hover:bg-[#e1b12c] text-black font-bold"
+                              title="Reset Sandi ke NISN Awal"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => setEditingStudent(s)}
                               className="p-1 neo-border-sm bg-[#008080] hover:bg-[#006666] text-white font-bold"
                               title="Ubah Data Siswa"
@@ -851,6 +915,7 @@ function AdminContent() {
                               <Edit className="w-3.5 h-3.5" />
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleDeleteStudent(s)}
                               className="p-1 neo-border-sm bg-[#ff7675] hover:bg-red-600 text-white font-bold"
                               title="Hapus Siswa"
@@ -1053,15 +1118,33 @@ function AdminContent() {
                 </div>
 
                 <div>
-                  <label className="block font-bold mb-1">Reset Kata Sandi:</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold">Reset Kata Sandi:</label>
+                    {editingStudent.nisn_nip && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingStudent({
+                            ...editingStudent,
+                            password: editingStudent.nisn_nip,
+                            mustChangePassword: true,
+                          })
+                        }
+                        className="text-[10px] text-teal-800 bg-teal-50 px-2 py-0.5 border border-teal-400 font-bold hover:bg-teal-100"
+                        title="Setel sandi ke NISN & aktifkan wajib ganti sandi"
+                      >
+                        🔄 Setel ke NISN ({editingStudent.nisn_nip})
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
-                    placeholder="Masukkan kata sandi baru"
+                    placeholder="Kosongkan jika tidak ingin mengubah sandi"
                     value={editingStudent.password || ''}
                     onChange={(e) => setEditingStudent({ ...editingStudent, password: e.target.value })}
                     className="w-full p-2 neo-border-sm bg-white"
                   />
-                  <span className="text-[10px] text-zinc-500">Ubah sandi jika siswa lupa password.</span>
+                  <span className="text-[10px] text-zinc-500">Kosongkan jika tetap mempertahankan sandi saat ini.</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 bg-[#f8f9fa] border border-zinc-300">
@@ -1188,6 +1271,57 @@ function AdminContent() {
                   >
                     <Trash2 className="w-4 h-4" />
                     Ya, Hapus Permanen 🗑️
+                  </button>
+                </div>
+              </div>
+            </RetroWindow>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL KONFIRMASI RESET KATA SANDI (RETRO MODAL) */}
+      {resetConfirm && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <RetroWindow
+              title={`RESET KATA SANDI ${resetConfirm.role === 'teacher' ? 'GURU' : 'SISWA'}`}
+              headerColor="mustard"
+              icon={<RotateCcw className="w-4 h-4 text-black" />}
+            >
+              <div className="space-y-4 font-mono text-xs">
+                <div className="bg-[#fff9db] neo-border-sm p-4 text-center space-y-2">
+                  <div className="w-12 h-12 bg-[#fdcb6e] neo-border flex items-center justify-center mx-auto text-black font-black">
+                    <RotateCcw className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-black text-amber-950">
+                    Reset Kata Sandi {resetConfirm.name}?
+                  </h3>
+                  <p className="text-xs text-zinc-700 leading-relaxed">
+                    Kata sandi akan dikembalikan ke <strong>{resetConfirm.role === 'teacher' ? 'NIP' : 'NISN'} awal</strong>:{' '}
+                    <span className="font-bold bg-white px-2 py-0.5 border border-black inline-block my-1">
+                      {resetConfirm.nisn_nip || 'smalledu123'}
+                    </span>
+                    <br />
+                    Akun akan otomatis diwajibkan mengganti kata sandi saat login berikutnya.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t-2 border-black">
+                  <RetroButton
+                    type="button"
+                    variant="white"
+                    size="sm"
+                    onClick={() => setResetConfirm(null)}
+                  >
+                    Batal
+                  </RetroButton>
+                  <button
+                    type="button"
+                    className="px-4 py-2 bg-[#fdcb6e] hover:bg-[#e1b12c] text-black font-mono font-black neo-border-sm transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:translate-x-0.5 active:translate-y-0.5"
+                    onClick={executeResetPassword}
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Ya, Reset Sandi Sekarang 🔄
                   </button>
                 </div>
               </div>

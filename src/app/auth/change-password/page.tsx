@@ -15,13 +15,14 @@ export default function ChangePasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     const currentUser = DataProvider.getCurrentUser();
     setUser(currentUser);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -36,13 +37,24 @@ export default function ChangePasswordPage() {
     }
 
     if (user) {
-      DataProvider.changePassword(user.id, newPassword);
-      setSuccess(true);
-      setTimeout(() => {
-        if (user.role === 'student') router.push('/student');
-        else if (user.role === 'teacher') router.push('/teacher');
-        else router.push('/admin');
-      }, 1500);
+      setIsSubmitting(true);
+      try {
+        const ok = await DataProvider.changePasswordAsync(user.id, newPassword);
+        if (ok) {
+          setSuccess(true);
+          setTimeout(() => {
+            if (user.role === 'student') router.push('/student');
+            else if (user.role === 'teacher') router.push('/teacher');
+            else router.push('/admin');
+          }, 1200);
+        } else {
+          setError('Gagal memperbarui kata sandi. Silakan coba kembali.');
+          setIsSubmitting(false);
+        }
+      } catch (err: any) {
+        setError(err?.message || 'Terjadi kendala saat menyimpan kata sandi baru.');
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -119,8 +131,8 @@ export default function ChangePasswordPage() {
               </div>
 
               <div className="pt-2">
-                <RetroButton type="submit" variant="teal" className="w-full">
-                  Simpan Kata Sandi Baru & Lanjutkan
+                <RetroButton type="submit" variant="teal" className="w-full" disabled={isSubmitting}>
+                  {isSubmitting ? 'Menyimpan Kata Sandi...' : 'Simpan Kata Sandi Baru & Lanjutkan'}
                 </RetroButton>
               </div>
             </form>

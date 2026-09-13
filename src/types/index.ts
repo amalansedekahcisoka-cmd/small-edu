@@ -1,5 +1,28 @@
 export type UserRole = 'student' | 'teacher' | 'admin';
 
+export interface CourseEnrollment {
+  courseId: string;
+  teacherId?: string;
+  status: 'active' | 'pending' | 'rejected';
+  joinedAt: string;
+  courseTitle?: string;
+  teacherName?: string;
+}
+
+export interface JoinRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  studentNisn: string;
+  studentClass?: string;
+  courseId: string;
+  courseTitle: string;
+  teacherId: string;
+  teacherName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -12,6 +35,8 @@ export interface User {
   activityPoints?: number;     // Akumulasi Poin Keaktifan Belajar (XP). 100 XP = 1 Bintang
   gradeClass?: string;         // untuk Siswa: kelas mereka (e.g. "X RPL 1")
   assignedClasses?: string[];  // untuk Guru: daftar kelas yang diajar
+  status?: 'active' | 'pending' | 'rejected'; // Status akun
+  enrolledCourses?: CourseEnrollment[];       // Daftar kursus/mapel yang diikuti
   password?: string;
   createdAt: string;
 }
@@ -136,6 +161,7 @@ export interface Course {
   isPublished: boolean;
   targetClasses?: string[];    // kelas yang berhak akses course ini (e.g. ["X RPL 1", "X RPL 2"])
   starSettings?: CourseStarSettings; // Konfigurasi pemberian poin keaktifan & bintang oleh Guru
+  joinCode?: string;           // Kode unik alfanumerik untuk bergabung (e.g. "MTK-7A", "X9K2PQ")
 }
 
 export type ChapterStatus =

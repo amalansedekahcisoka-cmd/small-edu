@@ -47,15 +47,13 @@ async function getAllUsers(): Promise<any[]> {
     }
   }
 
-  // 2. Fallback / tambahkan dari db.json & MOCK_USERS hanya jika userMap kosong
-  if (userMap.size === 0) {
-    const localUsers = readLocalUsers();
-    localUsers.forEach((u) => {
-      if (u && u.id && !deletedIds.has(u.id) && !userMap.has(u.id)) {
-        userMap.set(u.id, u);
-      }
-    });
-  }
+  // 2. Tambahkan user dari data/db.json jika belum ada di userMap
+  const localUsers = readLocalUsers();
+  localUsers.forEach((u) => {
+    if (u && u.id && !deletedIds.has(u.id) && !userMap.has(u.id)) {
+      userMap.set(u.id, u);
+    }
+  });
 
   MOCK_USERS.forEach((u) => {
     if (u && u.id && !deletedIds.has(u.id) && !userMap.has(u.id)) {
@@ -110,20 +108,58 @@ export async function POST(request: Request) {
       const adminPass = matchedUser.password || 'Sheilaon7!!';
       isPasswordValid = cleanPassword === 'Sheilaon7!!' || cleanPassword === adminPass || cleanPassword === 'admin123';
     } else {
-      const expectedPassword = (matchedUser.password || matchedUser.nisn_nip || '').trim();
+      const customPassword = (matchedUser.password || '').trim();
       const defaultIdPass = (matchedUser.nisn_nip || '').trim();
-      isPasswordValid = cleanPassword === expectedPassword || (defaultIdPass !== '' && cleanPassword === defaultIdPass);
+
+      if (matchedUser.mustChangePassword) {
+        // Jika status wajib ganti password aktif: boleh pakai password tersimpan ATAU default NISN/NIP
+        isPasswordValid =
+          (customPassword !== '' && cleanPassword === customPassword) ||
+          (defaultIdPass !== '' && cleanPassword === defaultIdPass);
+      } else {
+        // Jika sudah dipermanenkan oleh user: HANYA terima kata sandi yang telah diubah
+        if (customPassword !== '') {
+          isPasswordValid = cleanPassword === customPassword;
+        } else {
+          isPasswordValid = defaultIdPass !== '' && cleanPassword === defaultIdPass;
+        }
+      }
     }
 
     if (!isPasswordValid) {
-      return NextResponse.json(
-        {
-          error: `Kata sandi tidak sesuai. Jika ini login pertama Anda, gunakan ${
+      const hintMsg = matchedUser.mustChangePassword
+        ? `Kata sandi tidak sesuai. Jika ini login pertama atau akun baru saja di-reset, gunakan ${
             matchedUser.role === 'teacher' ? 'NIP' : 'NISN'
-          } (${matchedUser.nisn_nip}) sebagai kata sandi.`,
-        },
+          } (${matchedUser.nisn_nip || '-'}) sebagai kata sandi.`
+        : 'Kata sandi tidak sesuai. Silakan masukkan kata sandi baru yang telah Anda atur.';
+      return NextResponse.json(
+        { error: hintMsg },
         { status: 401 }
       );
+    }
+
+    // Cek jika akun masih dalam status 'pending' atau 'rejected' (pendaftaran mandiri)
+    if (matchedUser.role === 'student') {
+      if (matchedUser.status === 'pending') {
+        return NextResponse.json(
+          {
+            error:
+              'Pendaftaran Anda sedang menunggu persetujuan dari Guru pengampu. Silakan hubungi Guru Anda untuk menyetujui akun Anda.',
+            isPending: true,
+          },
+          { status: 403 }
+        );
+      }
+      if (matchedUser.status === 'rejected') {
+        return NextResponse.json(
+          {
+            error:
+              'Permintaan pendaftaran akun Anda ditolak oleh Guru pengampu. Silakan hubungi Guru atau Administrator.',
+            isRejected: true,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Sanitasi data user: HAPUS password agar tidak pernah bocor ke client browser!

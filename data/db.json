@@ -10,14 +10,198 @@
       "mustChangePassword": false,
       "starsCount": 0,
       "createdAt": "2026-07-01T08:00:00Z"
+    },
+    {
+      "name": "MONALISA",
+      "email": "mona@email.com",
+      "role": "student",
+      "nisn_nip": "1234512345",
+      "gradeClass": "X-7",
+      "password": "1234512345",
+      "mustChangePassword": false,
+      "id": "user-1789268071648",
+      "starsCount": 0,
+      "createdAt": "2026-09-13T02:54:31.648Z"
+    },
+    {
+      "name": "DUDI",
+      "email": "dudi@email.com",
+      "role": "student",
+      "nisn_nip": "1234412344",
+      "gradeClass": "X RPL 1",
+      "password": "1234512345",
+      "mustChangePassword": false,
+      "id": "user-1789268143380",
+      "starsCount": 0,
+      "createdAt": "2026-09-13T02:55:43.380Z"
     }
   ],
   "classes": [],
   "courses": [],
-  "chapters": [],
+  "chapters": [
+    {
+      "courseId": "crs-1789206884720",
+      "title": "Sub-Bab 1.4: TUGAS PORTOFOLIO",
+      "description": "KIRI TUGAS PADA LINK DIBAWAH INI",
+      "order_index": 4,
+      "type": "link",
+      "passing_grade": 60,
+      "babNumber": 1,
+      "babTitle": "BAHASA INDONESIA",
+      "subChapterNumber": "1.4",
+      "itemCategory": "sub_chapter",
+      "externalUrl": "https://forms.gle/7tr4F7qP3dUjJbudA",
+      "activityRewardPoints": 10,
+      "schedule": {
+        "isEnabled": true,
+        "startDate": "2026-09-11T00:00:00.000Z",
+        "endDate": "2026-09-13T00:00:00.000Z"
+      },
+      "id": "ch-1789263541285"
+    }
+  ],
   "submissions": [],
   "achievements": [],
-  "activityLogs": [],
+  "activityLogs": [
+    {
+      "id": "act-1789268156526-ww4q",
+      "userId": "user-1789268143380",
+      "userName": "DUDI",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "LOGIN",
+      "details": "Siswa berhasil login dan memasuki sistem Small-Edu.",
+      "timestamp": "2026-09-13T02:55:56.526Z"
+    },
+    {
+      "id": "act-1789268143381-nd8z",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: DUDI (student) - 1234412344",
+      "timestamp": "2026-09-13T02:55:43.381Z"
+    },
+    {
+      "id": "act-1789268089257-4us6",
+      "userId": "user-1789268071648",
+      "userName": "MONALISA",
+      "userRole": "student",
+      "userClass": "X-7",
+      "action": "LOGIN",
+      "details": "Siswa berhasil login dan memasuki sistem Small-Edu.",
+      "timestamp": "2026-09-13T02:54:49.257Z"
+    },
+    {
+      "id": "act-1789268071654-8bzm",
+      "userId": "user-superadmin",
+      "userName": "Superadmin",
+      "userRole": "admin",
+      "action": "CREATE_USER",
+      "details": "Mendaftarkan pengguna baru: MONALISA (student) - 1234512345",
+      "timestamp": "2026-09-13T02:54:31.654Z"
+    },
+    {
+      "id": "act-1789267750016-epqp",
+      "userId": "student_1789267720883",
+      "userName": "RUDIANSYAH",
+      "userRole": "student",
+      "userClass": "X RPL 1",
+      "action": "LOGIN",
+      "details": "Siswa berhasil login dan memasuki sistem Small-Edu.",
+      "timestamp": "2026-09-13T02:49:10.016Z"
+    },
+    {
+      "id": "act-1789265245377-b8ud",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "ACTIVITY_XP_GAINED",
+      "details": "+10 XP (Video Pembelajaran Tuntas): Menonton penuh video pembahasan Sub-Bab 1.1: PENYERAPAN KOSAKATA. Progres: 25/100 XP menuju bintang berikutnya.",
+      "courseId": "crs-1789206884720",
+      "chapterId": "ch-1789214941634",
+      "timestamp": "2026-09-13T02:07:25.377Z"
+    },
+    {
+      "id": "act-1789265245371-msay",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "VIDEO_WATCH_FINISHED",
+      "details": "Menyelesaikan tontonan video Sub-Bab 1.1: PENYERAPAN KOSAKATA (Target tercapai).",
+      "courseId": "crs-1789206884720",
+      "chapterId": "ch-1789214941634",
+      "timestamp": "2026-09-13T02:07:25.371Z"
+    },
+    {
+      "id": "act-1789265017557-fmkg",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "OPEN_CHAPTER",
+      "details": "Membuka dan mulai mempelajari materi: Sub-Bab 1.1: PENYERAPAN KOSAKATA.",
+      "courseId": "crs-1789206884720",
+      "chapterId": "ch-1789214941634",
+      "timestamp": "2026-09-13T02:03:37.557Z"
+    },
+    {
+      "id": "act-1789264917674-0wft",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "SYNC_XP_REWARD",
+      "details": "Penyelarasan otomatis poin keaktifan: disesuaikan menjadi 30 XP (-20 XP) berdasarkan bobot penilaian terbaru dari guru.",
+      "timestamp": "2026-09-13T02:01:57.674Z"
+    },
+    {
+      "id": "act-1789263300750-w3yb",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "OPEN_CHAPTER",
+      "details": "Membuka dan mulai mempelajari materi: Sub-Bab 1.1: PENYERAPAN KOSAKATA.",
+      "courseId": "crs-1789206884720",
+      "chapterId": "ch-1789214941634",
+      "timestamp": "2026-09-13T01:35:00.750Z"
+    },
+    {
+      "id": "act-1789263286893-pwi2",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "LOGIN",
+      "details": "Siswa berhasil login dan memasuki sistem Small-Edu.",
+      "timestamp": "2026-09-13T01:34:46.893Z"
+    },
+    {
+      "id": "act-1789263211354-jnip",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "OPEN_CHAPTER",
+      "details": "Membuka dan mulai mempelajari materi: Sub-Bab 1.1: PENYERAPAN KOSAKATA.",
+      "courseId": "crs-1789206884720",
+      "chapterId": "ch-1789214941634",
+      "timestamp": "2026-09-13T01:33:31.354Z"
+    },
+    {
+      "id": "act-1789263182631-nemd",
+      "userId": "user-1789225071307",
+      "userName": "ica",
+      "userRole": "student",
+      "userClass": "KELAS 10-7",
+      "action": "PASSWORD_CHANGED",
+      "details": "Pengguna ica berhasil memperbarui kata sandi mandiri secara permanen.",
+      "timestamp": "2026-09-13T01:33:02.631Z"
+    }
+  ],
   "deletedUserIds": [
     "user-teacher-rudiansyah",
     "user-student-ica",
@@ -40,5 +224,52 @@
     "course-web-dev",
     "crs-1789119026980"
   ],
-  "progress": {}
+  "progress": {
+    "user-1789225071307_crs-1789206884720": {
+      "current_chapter_index": 4,
+      "totalStarsEarned": 0,
+      "userId": "user-1789225071307",
+      "chapters": {
+        "ch-1789213811301": {
+          "is_completed": true,
+          "xpClaimed": true,
+          "chapterId": "ch-1789213811301",
+          "lastAttemptAt": "2026-09-12T15:02:55.542Z",
+          "score": 100,
+          "status": "passed",
+          "order_index": 1
+        },
+        "ch-1789214833855": {
+          "remedialAllowed": false,
+          "score": 70,
+          "chapterId": "ch-1789214833855",
+          "status": "passed",
+          "order_index": 2,
+          "maxAttempts": 2,
+          "lastAttemptAt": "2026-09-13T01:25:15.843Z",
+          "teacherGrace": true,
+          "is_completed": true,
+          "attemptCount": 2,
+          "teacherFeedback": "Jawaban relevan dan memenuhi indikator penilaian."
+        },
+        "ch-1789214941634": {
+          "chapterId": "ch-1789214941634",
+          "is_completed": true,
+          "order_index": 3,
+          "status": "passed",
+          "score": 100,
+          "watchPercentage": 100,
+          "lastAttemptAt": "2026-09-13T02:07:25.368Z",
+          "xpClaimed": true
+        },
+        "ch-1789263541285": {
+          "chapterId": "ch-1789263541285",
+          "order_index": 4,
+          "is_completed": false,
+          "status": "unlocked"
+        }
+      },
+      "courseId": "crs-1789206884720"
+    }
+  }
 }

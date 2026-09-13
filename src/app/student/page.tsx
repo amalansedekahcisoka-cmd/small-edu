@@ -29,6 +29,8 @@ import {
   Clock,
   AlertCircle,
   Printer,
+  Plus,
+  UserPlus,
 } from 'lucide-react';
 
 export default function StudentDashboard() {
@@ -45,14 +47,17 @@ export default function StudentDashboard() {
   const [selectedBabReport, setSelectedBabReport] = useState<BabLearningReport | null>(null);
   const selectedCourseIdRef = React.useRef<string | null>(null);
 
+  // State Modal Gabung Kelas Lain dengan Kode
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [joinInputCode, setJoinInputCode] = useState('');
+  const [inspectingJoin, setInspectingJoin] = useState(false);
+  const [joinCoursePreview, setJoinCoursePreview] = useState<Course | null>(null);
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [joinSuccessMsg, setJoinSuccessMsg] = useState<string | null>(null);
+  const [isSubmittingJoin, setIsSubmittingJoin] = useState(false);
+
   const loadDashboard = async () => {
     let currentUser = DataProvider.getCurrentUser();
-    if (!currentUser) return;
-
-    DataProvider.syncUserActivityPoints(currentUser.id);
-    currentUser = DataProvider.getCurrentUser();
-    setUser(currentUser);
-
     if (!currentUser) return;
 
     // Guru diarahkan kembali ke panel guru jika mengakses halaman siswa
@@ -67,11 +72,20 @@ export default function StudentDashboard() {
       return;
     }
 
-    // Ambil daftar kursus terbaru dari Cloud Firestore & cache lokal
+    // Ambil daftar kursus & bab terbaru dari Cloud Firestore & cache lokal
     const allCourses = await DataProvider.getCoursesAsync();
+    await DataProvider.getChaptersAsync();
 
-    // Filter course berdasarkan kelas siswa (dengan normalisasi komprehensif)
+    // Selaraskan poin keaktifan dengan skor penilaian terbaru dari guru
+    DataProvider.syncUserActivityPoints(currentUser.id);
+    currentUser = DataProvider.getCurrentUser();
+    if (!currentUser) return;
+    setUser(currentUser);
+
+    // Filter course berdasarkan kelas siswa ATAU yang terdaftar di enrolledCourses siswa
     const studentClass = currentUser.gradeClass || '';
+    const enrolledMap = new Map((currentUser.enrolledCourses || []).map((e) => [e.courseId, e.status]));
+
     const normalizeClass = (s: string) =>
       s
         .toLowerCase()
@@ -82,6 +96,10 @@ export default function StudentDashboard() {
         .replace(/^12/, 'xii');
 
     const myCourses = allCourses.filter((c) => {
+      // Jika siswa secara eksplisit mendaftar via join code
+      if (enrolledMap.has(c.id)) return true;
+
+      // Jalur didaftarkan admin berdasarkan kelas
       if (!c.targetClasses || c.targetClasses.length === 0 || c.targetClasses.includes('ALL')) return true;
       if (!studentClass) return true;
       const normStudent = normalizeClass(studentClass);
@@ -139,8 +157,22 @@ export default function StudentDashboard() {
     DataProvider.syncWithServer().then(() => {
       loadDashboard();
     }).catch(console.error);
-    const interval = setInterval(loadDashboard, 4000);
-    return () => clearInterval(interval);
+
+    // Auto refresh hemat daya (60 detik)
+    const interval = setInterval(loadDashboard, 60000);
+
+    // Refresh otomatis begitu siswa kembali membuka tab browser
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadDashboard();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   if (isAuthLoading || !isAuthorized || !user) {
@@ -155,18 +187,189 @@ export default function StudentDashboard() {
   // Jika tidak ada course untuk kelas ini
   if (availableCourses.length === 0) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-16 text-center space-y-6">
-        <div className="w-16 h-16 bg-[#ffde59] neo-border neo-shadow flex items-center justify-center text-3xl mx-auto">📚</div>
+      <div className="max-w-2xl mx-auto px-4 py-12 text-center space-y-6">
+        <div className="w-16 h-16 bg-[#ffde59] neo-border neo-shadow flex items-center justify-center text-3xl mx-auto">
+          📚
+        </div>
         <div className="space-y-2">
           <h2 className="text-xl font-black font-mono">Belum Ada Materi untuk Kelas Anda</h2>
-          <p className="text-sm font-mono text-zinc-600">
-            Halo, <strong>{user.name}</strong>! Belum ada kursus yang ditetapkan untuk kelas <strong>{user.gradeClass || '-'}</strong>.
-            Guru pembimbing Anda sedang menyiapkan materi pembelajaran.
+          <p className="text-sm font-mono text-zinc-600 max-w-md mx-auto leading-relaxed">
+            Halo, <strong>{user.name}</strong>! Anda terdaftar di kelas <strong>{user.gradeClass || '-'}</strong>.
+            Jika Guru mata pelajaran Anda sudah memberikan <strong>Kode Pembelajaran</strong>, silakan masukkan kodenya di bawah ini untuk bergabung ke kelas.
           </p>
         </div>
-        <div className="p-4 bg-white neo-border font-mono text-xs text-zinc-500">
-          Jika ada pertanyaan, silakan hubungi Administrator atau Guru Pembimbing Anda.
+
+        {/* Tombol Utama Gabung Kelas */}
+        <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <RetroButton
+            variant="yellow"
+            size="lg"
+            icon={<Plus className="w-5 h-5" />}
+            onClick={() => {
+              setJoinInputCode('');
+              setJoinCoursePreview(null);
+              setJoinError(null);
+              setJoinSuccessMsg(null);
+              setIsJoinModalOpen(true);
+            }}
+          >
+            + Gabung Kelas dengan Kode Guru
+          </RetroButton>
         </div>
+
+        <div className="p-4 bg-white neo-border font-mono text-xs text-zinc-500 max-w-lg mx-auto">
+          💡 <strong>Tips:</strong> Minta 6 digit kode pembelajaran (contoh: <code>BAH-296</code>) kepada Guru Anda agar mata pelajaran langsung muncul di akun Anda.
+        </div>
+
+        {/* MODAL GABUNG KELAS TETAP BISA DIBUKA DISINI */}
+        {isJoinModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs text-left">
+            <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-150">
+              <RetroWindow
+                title="GABUNG KELAS DENGAN KODE GURU"
+                headerColor="teal"
+                icon={<Plus className="w-4 h-4 text-white" />}
+                onClose={() => setIsJoinModalOpen(false)}
+              >
+                <div className="p-4 space-y-4 font-mono">
+                  <div className="bg-[#f0fdfa] p-3 neo-border-sm text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 font-bold text-[#008080]">
+                      <Sparkles className="w-4 h-4" />
+                      <span>Masukkan Kode Guru Pengampu</span>
+                    </div>
+                    <p className="text-zinc-600">
+                      Ketik kode yang diberikan oleh Guru Anda (misal: <strong>BAH-296</strong>).
+                    </p>
+                  </div>
+
+                  {joinSuccessMsg ? (
+                    <div className="p-4 bg-emerald-50 neo-border-sm border-emerald-600 text-xs text-emerald-950 space-y-3">
+                      <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                        <span>Permintaan Terkirim!</span>
+                      </div>
+                      <p>{joinSuccessMsg}</p>
+                      <RetroButton
+                        type="button"
+                        variant="teal"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          setIsJoinModalOpen(false);
+                          loadDashboard();
+                        }}
+                      >
+                        Oke, Mengerti
+                      </RetroButton>
+                    </div>
+                  ) : (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!joinCoursePreview || !user) return;
+                        setIsSubmittingJoin(true);
+                        setJoinError(null);
+                        try {
+                          const res = await DataProvider.requestJoinOtherCourse(user.id, joinCoursePreview);
+                          if (res.success) {
+                            setJoinSuccessMsg(
+                              `Permintaan bergabung ke kelas "${joinCoursePreview.title}" berhasil dikirim. Beritahukan ${joinCoursePreview.teacherName} untuk menyetujui akun Anda.`
+                            );
+                            await loadDashboard();
+                          } else {
+                            setJoinError(res.message);
+                          }
+                        } catch (err: any) {
+                          console.error('Error joining course:', err);
+                          setJoinError('Terjadi kesalahan sistem saat mengirim permintaan.');
+                        } finally {
+                          setIsSubmittingJoin(false);
+                        }
+                      }}
+                      className="space-y-4"
+                    >
+                      {joinError && (
+                        <div className="p-2.5 bg-red-50 neo-border-sm border-red-500 text-xs text-red-700">
+                          {joinError}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-700 mb-1">
+                          KODE PEMBELAJARAN GURU:
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={10}
+                          placeholder="Contoh: BAH-296"
+                          value={joinInputCode}
+                          onChange={async (e) => {
+                            const val = e.target.value.toUpperCase();
+                            setJoinInputCode(val);
+                            setJoinError(null);
+                            if (val.trim().length >= 3) {
+                              setInspectingJoin(true);
+                              try {
+                                const found = await DataProvider.getCourseByJoinCode(val.trim());
+                                setJoinCoursePreview(found);
+                                if (!found) {
+                                  setJoinError(`Kode "${val.trim()}" tidak ditemukan.`);
+                                }
+                              } catch {
+                                setJoinError('Gagal memeriksa kode.');
+                              } finally {
+                                setInspectingJoin(false);
+                              }
+                            } else {
+                              setJoinCoursePreview(null);
+                            }
+                          }}
+                          className="w-full p-2.5 neo-border-sm font-mono font-bold text-sm tracking-widest text-center uppercase bg-white focus:bg-[#f0fdfa] focus:border-[#008080] focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Preview Course */}
+                      {joinCoursePreview && (
+                        <div className="p-3 bg-white neo-border-sm border-emerald-600 text-xs space-y-1 animate-in fade-in duration-150">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-800 text-sm">
+                            <BookOpen className="w-4 h-4 shrink-0 text-emerald-600" />
+                            <span>{joinCoursePreview.title}</span>
+                          </div>
+                          <div className="text-zinc-600 text-[11px] pl-5">
+                            Mata Pelajaran: <strong>{joinCoursePreview.subject}</strong> ({joinCoursePreview.gradeLevel || 'Kelas X'})
+                          </div>
+                          <div className="text-zinc-600 text-[11px] pl-5">
+                            Guru Pengampu: <strong>{joinCoursePreview.teacherName}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 flex items-center justify-end gap-2 border-t-2 border-black">
+                        <RetroButton
+                          type="button"
+                          variant="white"
+                          size="sm"
+                          onClick={() => setIsJoinModalOpen(false)}
+                        >
+                          Batal
+                        </RetroButton>
+                        <RetroButton
+                          type="submit"
+                          variant="teal"
+                          size="sm"
+                          disabled={isSubmittingJoin || !joinCoursePreview}
+                        >
+                          {isSubmittingJoin ? 'Mengirim...' : 'Kirim Permintaan'}
+                        </RetroButton>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              </RetroWindow>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -245,29 +448,55 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      {/* Multi-Course Selector (tampil jika ada lebih dari 1 kursus untuk kelas ini) */}
-      {availableCourses.length > 1 && (
-        <div className="space-y-2">
+      {/* Multi-Course Selector & Tombol Gabung Kelas Baru */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="font-mono text-xs font-bold text-zinc-600 uppercase">
-            📚 Mata Pelajaran Tersedia untuk Kelas {user.gradeClass} ({availableCourses.length} Kursus):
+            📚 Mata Pelajaran Anda ({availableCourses.length} Kursus):
           </div>
-          <div className="flex flex-wrap gap-2">
-            {availableCourses.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => handleSelectCourse(c)}
-                className={`px-3 py-2 neo-border-sm font-mono text-xs font-bold transition-all ${
-                  course?.id === c.id
-                    ? 'bg-[#008080] text-white neo-shadow-sm'
-                    : 'bg-white text-black hover:bg-zinc-100'
-                }`}
-              >
-                {c.subject} — {c.title}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => {
+              setJoinInputCode('');
+              setJoinCoursePreview(null);
+              setJoinError(null);
+              setJoinSuccessMsg(null);
+              setIsJoinModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-bold bg-[#ffde59] text-black neo-border-sm hover:bg-yellow-400 transition-colors shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Gabung Kelas / Mapel Baru</span>
+          </button>
         </div>
-      )}
+
+        {availableCourses.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {availableCourses.map((c) => {
+              const enrolledStatus = user?.enrolledCourses?.find((e) => e.courseId === c.id)?.status;
+              const isPending = enrolledStatus === 'pending';
+
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => handleSelectCourse(c)}
+                  className={`px-3 py-2 neo-border-sm font-mono text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    course?.id === c.id
+                      ? 'bg-[#008080] text-white neo-shadow-sm'
+                      : 'bg-white text-black hover:bg-zinc-100'
+                  }`}
+                >
+                  <span>{c.subject} — {c.title}</span>
+                  {isPending && (
+                    <span className="bg-amber-400 text-black text-[9px] px-1 py-0.5 font-bold uppercase">
+                      ⏳ Menunggu Guru
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Main Course Path View */}
       {course && (
@@ -285,6 +514,19 @@ export default function StudentDashboard() {
                 <span>Pengampu: <strong>{course.teacherName}</strong></span>
                 <span>Target Capaian Pembelajaran: <strong>75 Poin</strong></span>
               </div>
+
+              {/* Notice jika kursus ini berstatus pending approval guru */}
+              {user?.enrolledCourses?.find((e) => e.courseId === course.id)?.status === 'pending' && (
+                <div className="p-4 bg-amber-50 neo-border border-amber-600 font-mono text-xs space-y-2 text-amber-950">
+                  <div className="flex items-center gap-2 font-bold text-amber-900">
+                    <span className="text-base">⏳</span>
+                    <span>MENUNGGU PERSETUJUAN DARI {course.teacherName.toUpperCase()}</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    Permintaan Anda untuk bergabung ke mata pelajaran <strong>{course.title}</strong> telah terkirim. Seluruh materi pembahasan dan tugas akan terbuka otomatis setelah Bpk/Ibu Guru menyetujui permintaan Anda.
+                  </p>
+                </div>
+              )}
 
               {/* Sequential Path Chapters List - Structured as Book Hierarchy */}
               <div className="space-y-6 pt-2">
@@ -697,6 +939,157 @@ export default function StudentDashboard() {
           report={selectedBabReport}
           onClose={() => setSelectedBabReport(null)}
         />
+      )}
+
+      {/* MODAL GABUNG KELAS / MAPEL BARU */}
+      {isJoinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-150">
+            <RetroWindow
+              title="GABUNG KELAS / MAPEL BARU"
+              headerColor="teal"
+              icon={<Plus className="w-4 h-4 text-white" />}
+              onClose={() => setIsJoinModalOpen(false)}
+            >
+              <div className="p-4 space-y-4">
+                <div className="bg-[#f0fdfa] p-3 neo-border-sm text-xs font-mono space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-[#008080]">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Masukkan Kode dari Guru Pengampu</span>
+                  </div>
+                  <p className="text-zinc-600">
+                    Minta 6 digit kode kelas kepada Guru pengampu mata pelajaran yang ingin Anda ikuti.
+                  </p>
+                </div>
+
+                {joinSuccessMsg ? (
+                  <div className="p-4 bg-emerald-50 neo-border-sm border-emerald-600 text-xs font-mono text-emerald-950 space-y-3">
+                    <div className="flex items-center gap-2 font-bold text-sm text-emerald-800">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <span>Permintaan Terkirim!</span>
+                    </div>
+                    <p>{joinSuccessMsg}</p>
+                    <RetroButton
+                      type="button"
+                      variant="teal"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        setIsJoinModalOpen(false);
+                        loadDashboard();
+                      }}
+                    >
+                      Oke, Mengerti
+                    </RetroButton>
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!joinCoursePreview || !user) return;
+                      setIsSubmittingJoin(true);
+                      setJoinError(null);
+                      try {
+                        const res = await DataProvider.requestJoinOtherCourse(user.id, joinCoursePreview);
+                        if (res.success) {
+                          setJoinSuccessMsg(
+                            `Permintaan bergabung ke kelas "${joinCoursePreview.title}" berhasil dikirim. Menunggu persetujuan dari ${joinCoursePreview.teacherName}.`
+                          );
+                          // Refresh data user lokal
+                          await loadDashboard();
+                        } else {
+                          setJoinError(res.message);
+                        }
+                      } catch (err: any) {
+                        console.error('Error joining course:', err);
+                        setJoinError('Terjadi kesalahan sistem saat mengirim permintaan.');
+                      } finally {
+                        setIsSubmittingJoin(false);
+                      }
+                    }}
+                    className="space-y-4"
+                  >
+                    {joinError && (
+                      <div className="p-2.5 bg-red-50 neo-border-sm border-red-500 text-xs font-mono text-red-700">
+                        {joinError}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs font-mono font-bold text-zinc-700 mb-1">
+                        KODE KELAS (6 DIGIT)
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={10}
+                        placeholder="Contoh: MTK-7A atau X9K2PQ"
+                        value={joinInputCode}
+                        onChange={async (e) => {
+                          const val = e.target.value.toUpperCase();
+                          setJoinInputCode(val);
+                          setJoinError(null);
+                          if (val.trim().length >= 3) {
+                            setInspectingJoin(true);
+                            try {
+                              const found = await DataProvider.getCourseByJoinCode(val.trim());
+                              setJoinCoursePreview(found);
+                              if (!found) {
+                                setJoinError(`Kode "${val.trim()}" tidak ditemukan.`);
+                              }
+                            } catch {
+                              setJoinError('Gagal memeriksa kode.');
+                            } finally {
+                              setInspectingJoin(false);
+                            }
+                          } else {
+                            setJoinCoursePreview(null);
+                          }
+                        }}
+                        className="w-full p-2.5 neo-border-sm font-mono font-bold text-sm tracking-widest text-center uppercase bg-white focus:bg-[#f0fdfa] focus:border-[#008080] focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Preview Course */}
+                    {joinCoursePreview && (
+                      <div className="p-3 bg-white neo-border-sm border-emerald-600 text-xs font-mono space-y-1 animate-in fade-in duration-150">
+                        <div className="flex items-center gap-1.5 font-bold text-emerald-800 text-sm">
+                          <BookOpen className="w-4 h-4 shrink-0 text-emerald-600" />
+                          <span>{joinCoursePreview.title}</span>
+                        </div>
+                        <div className="text-zinc-600 text-[11px] pl-5">
+                          Mata Pelajaran: <strong>{joinCoursePreview.subject}</strong> ({joinCoursePreview.gradeLevel || 'Kelas X'})
+                        </div>
+                        <div className="text-zinc-600 text-[11px] pl-5">
+                          Guru Pengampu: <strong>{joinCoursePreview.teacherName}</strong>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-2 flex items-center justify-end gap-2 border-t-2 border-black">
+                      <RetroButton
+                        type="button"
+                        variant="white"
+                        size="sm"
+                        onClick={() => setIsJoinModalOpen(false)}
+                      >
+                        Batal
+                      </RetroButton>
+                      <RetroButton
+                        type="submit"
+                        variant="teal"
+                        size="sm"
+                        disabled={isSubmittingJoin || !joinCoursePreview}
+                      >
+                        {isSubmittingJoin ? 'Mengirim...' : 'Kirim Permintaan'}
+                      </RetroButton>
+                    </div>
+                  </form>
+                )}
+              </div>
+            </RetroWindow>
+          </div>
+        </div>
       )}
     </div>
   );

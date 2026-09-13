@@ -7,6 +7,13 @@ import { RetroWindow } from '@/components/ui/RetroWindow';
 import { RetroButton } from '@/components/ui/RetroButton';
 import { LogIn, AlertCircle, Lock, UserCheck, ShieldCheck, Info } from 'lucide-react';
 
+function canAccessRoute(role: string, targetPath: string): boolean {
+  if (targetPath.startsWith('/admin')) return role === 'admin';
+  if (targetPath.startsWith('/teacher')) return role === 'teacher' || role === 'admin';
+  if (targetPath.startsWith('/student')) return role === 'student' || role === 'teacher' || role === 'admin';
+  return true;
+}
+
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -19,15 +26,23 @@ function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
 
-  // Jika di browser/device ini user SUDAH memiliki cache sesi aktif, langsung arahkan ke dashboard/redirect target
+  // Periksa sesi aktif: jika auth_required aktif, bersihkan cache lokal yang basi agar tidak terjadi redirect loop!
   useEffect(() => {
+    if (authRequired) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('smalledu_current_user');
+      }
+      setIsCheckingSession(false);
+      return;
+    }
+
     const user = DataProvider.getCurrentUser();
     if (user) {
       if (user.mustChangePassword) {
         router.replace('/auth/change-password');
         return;
       }
-      if (redirectParam && redirectParam.startsWith('/')) {
+      if (redirectParam && redirectParam.startsWith('/') && canAccessRoute(user.role, redirectParam)) {
         router.replace(redirectParam);
       } else if (user.role === 'admin') {
         router.replace('/admin');
@@ -39,7 +54,7 @@ function LoginForm() {
       return;
     }
     setIsCheckingSession(false);
-  }, [router, redirectParam]);
+  }, [router, redirectParam, authRequired]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,19 +113,44 @@ function LoginForm() {
             const adminPass = found.password || 'Sheilaon7!!';
             isValid = cleanPassword === 'Sheilaon7!!' || cleanPassword === adminPass || cleanPassword === 'admin123';
           } else {
-            const expected = (found.password || found.nisn_nip || '').trim();
+            const customPassword = (found.password || '').trim();
             const defaultIdPass = (found.nisn_nip || '').trim();
-            isValid = cleanPassword === expected || (defaultIdPass !== '' && cleanPassword === defaultIdPass);
+
+            if (found.mustChangePassword) {
+              isValid =
+                (customPassword !== '' && cleanPassword === customPassword) ||
+                (defaultIdPass !== '' && cleanPassword === defaultIdPass);
+            } else {
+              if (customPassword !== '') {
+                isValid = cleanPassword === customPassword;
+              } else {
+                isValid = defaultIdPass !== '' && cleanPassword === defaultIdPass;
+              }
+            }
           }
 
           if (!isValid) {
-            setError(
-              `Kata sandi tidak sesuai. Jika ini login pertama Anda, gunakan ${
-                found.role === 'teacher' ? 'NIP' : 'NISN'
-              } (${found.nisn_nip || '-'}) sebagai kata sandi.`
-            );
+            const hintMsg = found.mustChangePassword
+              ? `Kata sandi tidak sesuai. Jika ini login pertama atau akun baru saja di-reset, gunakan ${
+                  found.role === 'teacher' ? 'NIP' : 'NISN'
+                } (${found.nisn_nip || '-'}) sebagai kata sandi.`
+              : 'Kata sandi tidak sesuai. Silakan masukkan kata sandi baru yang telah Anda atur.';
+            setError(hintMsg);
             setIsLoading(false);
             return;
+          }
+
+          if (found.role === 'student') {
+            if (found.status === 'pending') {
+              setError('Pendaftaran Anda sedang menunggu persetujuan dari Guru pengampu. Silakan hubungi Guru Anda untuk menyetujui akun Anda.');
+              setIsLoading(false);
+              return;
+            }
+            if (found.status === 'rejected') {
+              setError('Permintaan pendaftaran akun Anda ditolak oleh Guru pengampu. Silakan hubungi Guru atau Administrator.');
+              setIsLoading(false);
+              return;
+            }
           }
 
           loginSuccess = true;
@@ -158,8 +198,8 @@ function LoginForm() {
         return;
       }
 
-      // Jika ada target redirect tugas/materi sebelumnya yang dicopas, arahkan langsung ke sana!
-      if (redirectParam && redirectParam.startsWith('/')) {
+      // Jika ada target redirect tugas/materi sebelumnya yang dicopas, arahkan ke sana jika hak akses sesuai!
+      if (redirectParam && redirectParam.startsWith('/') && canAccessRoute(matchedUser.role, redirectParam)) {
         router.push(redirectParam);
         return;
       }
@@ -269,6 +309,19 @@ function LoginForm() {
                 >
                   {isLoading ? 'Memverifikasi...' : 'Masuk ke Portal LMS'}
                 </RetroButton>
+              </div>
+
+              {/* Link Pendaftaran Mandiri Siswa */}
+              <div className="pt-2 border-t-2 border-dashed border-zinc-300 text-center">
+                <p className="text-xs text-zinc-600 font-mono mb-2">
+                  Siswa baru belum punya akun?
+                </p>
+                <a
+                  href="/register"
+                  className="inline-flex items-center justify-center gap-1.5 w-full py-2 px-3 text-xs font-mono font-bold text-[#008080] bg-[#f0fdfa] neo-border-sm hover:bg-[#ccfbf1] transition-colors"
+                >
+                  <span>📝 Daftar Mandiri dengan Kode Kelas Guru</span>
+                </a>
               </div>
             </form>
 
